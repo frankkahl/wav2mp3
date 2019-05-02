@@ -6,3 +6,13 @@
 #include <iostream>
 
 // TODO: Reference additional headers your program requires here.
+//#include "pthread.h"
+//#ifdef __PtW32Catch
+//__PtW32Catch{
+//	...
+//}
+//#else
+//catch (...) {
+//	...
+//}
+//#endif

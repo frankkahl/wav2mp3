@@ -1,15 +1,22 @@
 #ifndef WAV_HEADER_H
 #define WAV_HEADER_H
 
+#include <string>
+#include <map>
 // WAV header spec information:
 //https://web.archive.org/web/20140327141505/https://ccrma.stanford.edu/courses/422/projects/WaveFormat/
 //http://www.topherlee.com/software/pcm-tut-wavformat.html
+
+
+// forward declaration of map with description strings for audio format codes 
+// contained in wav_header.audio_formats
+extern std::map<short, std::string> audio_format_names;
 
 typedef struct wav_header {
 	// RIFF Header
 	char riff_header[4]; // Contains "RIFF"
 	int wav_size; // Size of the wav portion of the file, which follows the first 8 bytes. File size - 8
-	char wave_header[4]; // Contains "WAVE"
+	char format[4]; // should contain "WAVE" in case of a WAV file
 
 	// Format Header
 	char fmt_header[4]; // Contains "fmt " (includes trailing space)

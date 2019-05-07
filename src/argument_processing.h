@@ -5,13 +5,8 @@
 #ifndef ARGUMENT_PROCESSING_H
 #define ARGUMENT_PROCESSING_H
 
-// forward declaration instead of including <filesystem>
-// to avoid unnecessary namespace pollution of all cpp files which include this header
-namespace std {
-	namespace filesystem {
-		class recursive_directory_iterator;
-	}
-}
+#include <filesystem>   // forward declarations could be used here but they can be very error prone, see:
+						// https://google.github.io/styleguide/cppguide.html#Forward_Declarations
 
 /*!
  * Used for checking the command line arguments passed to main()

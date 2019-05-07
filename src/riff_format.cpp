@@ -2,9 +2,11 @@
 
 #include <map>
 #include <string>
+#include <cstdint>
 using namespace std;
 
-extern map<short, string> audio_format_names = { { 0x0001,  	"PCM"},
+// maps uint16_t codes for audio_formats to logical names
+extern map<uint16_t, string> audio_format_uint16_to_names = { { 0x0001,  	"PCM"},
 											{ 0x0002,  	"MS ADPCM"},
 											{ 0x0003,   "IEEE FLOAT"},
 											{ 0x0005,   "IBM CVSD"},
@@ -48,3 +50,18 @@ extern map<short, string> audio_format_names = { { 0x0001,  	"PCM"},
 											{ 0x1003, 	"OLISBC"},
 											{ 0x1004, 	"OLIOPR"}
 };
+
+// helper for swapping key, value of a map
+// This function assumes that all values of the passed map are unique
+template <class T1, class T2>
+static map<T2, T1> swap_keys_values(const map<T1, T2> &m) {
+	map<T2, T1> m1;
+
+	for (auto&& item : m) {
+		m1.emplace(item.second, item.first);
+	}
+
+	return m1;
+};
+
+extern map<string, uint16_t> audio_format_names_to_uint16 = swap_keys_values(audio_format_uint16_to_names);

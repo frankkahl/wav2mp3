@@ -1,7 +1,22 @@
+//
+// exports function convert_all_wav_files_in_directory to do the actual conversion work
+// all other functions are declared static since they are helper functions internally used only
+// Design decisions:
+//     - being a nitpicker with respect to the format assumptions about a WAV file:
+//         - a WAV file is a special RIFF file which besides the mandatory "RIFF" chunk
+//           must contain the chunks "fmt " and "data"
+//         - BUT a RIFF file does NOT guarantee any order of the chunks.
+//           Therefore assuming the chunk sequence "RIFF", "fmt ", "data"
+//           is strictly speaking incorrect and is therefore NOT assumed
+//         - all chunks with ids other than "fmt " and "data" are ignored
+//           but do not cause an error
+//     - clear and detailed warning and error messages
+//     - 
+
 #include "convert_wav_files.h"
 
-#include "wav_header.h"
-#include "lame.h"
+#include "riff_format.h"
+#include "lame_wrapper.h"
 
 #include <filesystem>
 #include <iostream>
@@ -10,30 +25,47 @@
 #include <tuple>
 #include <sstream>
 #include <map>
+#include <cstdint>
 
 namespace fs = std::filesystem;
 using namespace std;
 
 
-static tuple<bool, string> read_and_check_riff_section(ifstream &wav_file, const uintmax_t file_size) {
-	riff_header header;
+// helper type storing both the start offset and the size of the data payload
+// of a chunk
+typedef struct ChunkPosition {
+	std::streampos start;		// position to pass to ifstream::seekg(...) to move file pointer to beggining of chunk data
+	std::streamsize data_size;	// size of chunk data.
+} ChunkPosition;
+
+
+// helper type mapping the chunk id to the position information of its data
+typedef std::map<std::string, ChunkPosition> ChunkPositionMap;
+
+/*!
+ *   Tries to read the the RIFF master header (see RiffHeader in riff_format.h)
+ *   returns: if successful: tuple(true, <empty string>)
+ *            on failure: tuple(false, <error message>)
+ */
+static tuple<bool, string> read_and_check_riff_section(ifstream &file, const uintmax_t file_size) {
+	RiffHeader header;
 	stringstream ss; // for composing error message to return in case of failure
 	if (file_size < sizeof(header)) {
 		ss << "file too small for even the RIFF header";
 		return make_tuple(false, ss.str());
 	}
-	wav_file.read((char *)&header, sizeof(header));
-	if (wav_file.fail()) {
+	file.read((char *)&header, sizeof(header));
+	if (file.fail()) {
 		ss << "Reading the RIFF header failed: this error should never happen from the humble perspective of the poor programmmer." << endl;
 		return make_tuple(false, ss.str());
 	}
 	// check sanity of RIFF chunk first
 	if (string(header.riff_id, sizeof(header.riff_id)) != "RIFF") {
-		ss << "id of RIFF chunk does not contain \"RIFF\"";
+		ss << "FOURCC id of first chunk is not \"RIFF\"";
 		return make_tuple(false, ss.str());
 	}
 	if (header.total_data_size > file_size - sizeof(header.riff_id) - sizeof(header.total_data_size)) {
-		ss << "SERIOUS ERROR: total file size is smaller than total data size the RIFF header claims to be present";
+		ss << "total file size is smaller than total data size the RIFF header claims to be present";
 		return make_tuple(false, ss.str());
 	}
 	auto format = string(header.format, sizeof(header.format));
@@ -45,133 +77,498 @@ static tuple<bool, string> read_and_check_riff_section(ifstream &wav_file, const
 }
 
 /*!
- * Returns a tuple with first component true if the passed wav_header structure plus the passed file size describes a sane WAV file.
- * If not returns a tuple of false and a string describing the error in format
+ * Checks if the passed filestream points to a valid RIFF file.
+ * Returns a tuple of:
+ *     - ChunkPositionMap: maps the FOURCC chunk ids of all valid chunks found to
+ *       the positions and sizes of their data blocks.
+ *       If empty then either the file is not a RIFF file or it is corrupt.
+ *     - string: is empty if everything went fine, otherwise it contains a warning or error message.
  */
-static tuple<bool, map<string, chunk_position>, string> is_valid_riff_file(ifstream &wav_file, const uintmax_t file_size) {
+static tuple<ChunkPositionMap, string> is_valid_riff_file(ifstream &file, const uintmax_t file_size) {
 	stringstream ss;
-	map<string, chunk_position> chunk_positions;
-	auto[was_successful, message] = read_and_check_riff_section(wav_file, file_size); // better to unpack and the repack for return instead of
+	ChunkPositionMap chunk_positions;
+	auto[was_successful, message] = read_and_check_riff_section(file, file_size); // better to unpack and the repack for return instead of
 																					   // checking for the success code by the cryptic statement
 																					   // std::get<0>(tuple)
 	if (!was_successful) {
-		return make_tuple(was_successful, chunk_positions, message);
+		return make_tuple(chunk_positions, message);
 	}
 
 
 	// now inspect all chunks and store their positions and sizes
-	was_successful = false;
-	while (!wav_file.eof() || !wav_file.fail()) {
+	while ( !(file.eof() || file.fail()) ) {
 		char chunk_id_raw[4];
 		uint32_t valid_data_size;
-		wav_file.read(chunk_id_raw, sizeof(chunk_id_raw));					// first read FOURCC id of chunk
-		wav_file.read((char *)&valid_data_size, sizeof(valid_data_size));  // then the size of valid data in the data block
-		if (wav_file.fail()) {
+
+		file.read(chunk_id_raw, sizeof(chunk_id_raw));					// first read FOURCC id of chunk
+		file.read((char *)&valid_data_size, sizeof(valid_data_size));  // then the size of valid data in the data block
+		if (file.eof() || file.fail()) {
 			ss << "Reading chunk id and size failed.";
 			break;
 		}
+		auto chunk_id = string(chunk_id_raw, sizeof(chunk_id_raw));
+		// store start of data position in ChunkPosition struct first
+		// but do NOT store it yet...
+		ChunkPosition chunk_pos = { file.tellg(), valid_data_size };
+
+		// ... first advance pointer to the position of the last byte of the valid data block according to valid_data_size 
+		file.seekg(valid_data_size-1, ios_base::cur);
+		// then peek for the byte to enforce the eofbit or failbit to be set if not enough data is available
+		file.peek();
+		if (file.eof() || file.fail()) {
+			ss << "less data available as claimed in chunk \"" << chunk_id << "\"";
+			break;
+		}
+		// only if the claimed data is really there consider the chunk valid
+		// an add it to the chunk_positions
+		if (chunk_positions.count(chunk_id)) {
+			ss << "multiple \"" << chunk_id << "\" chunks found, using the latest one. ";
+		}
+		chunk_positions[chunk_id] = chunk_pos;
+
 		// the size of a data block is always padded to the nearest word boundary
 		// => calculate this padded size from the size of the valid data frame
 		uint32_t padded_data_size = valid_data_size / sizeof(uint16_t) * sizeof(uint16_t);
 		if (valid_data_size % sizeof(uint16_t)) {
 			padded_data_size += sizeof(uint16_t);
 		}
-		// only if advancing beyond the data is successful the chunk is considered to be valid
-		wav_file.seekg(valid_data_size, ios_base::cur);
-		if (wav_file.fail()) {
-			ss << "Moving file pointer behind data of chunk failed.";
+
+		// now forward by the number of padding bytes plus 1 to set the pointer to the beginning of the next chunk
+		// adding 1 is needed since the pointer currently points to the last byte of the current data block,
+		// not one position behind it
+		file.seekg(padded_data_size - valid_data_size + 1, ios_base::cur);
+		file.peek();			// if peeking the next byte just sets the eofbit without setting the failbit or badbit
+								// then the RIFF file is well formed, so no warning or error message is set
+		if (file.eof() && !file.fail()) {
 			break;
 		}
-
-		auto chunk_id = string(chunk_id_raw, sizeof(chunk_id_raw));
-		struct chunk_position chunk_pos = { wav_file.tellg(), valid_data_size };
-		if (chunk_positions.count(chunk_id)) {
-			ss << "Multiple \"" << chunk_id << "\" chunks found, using the latest one. ";
-		}
-		chunk_positions[chunk_id] = chunk_pos;
-		// now we advance by the number of padding bytes to the beginning of the next chunk
-		wav_file.seekg(padded_data_size - valid_data_size, ios_base::cur);
 	}
 
-	if (wav_file.eof()) {
-		was_successful = true;
-	}
-	return make_tuple(was_successful, chunk_positions, ss.str());
+	return make_tuple(chunk_positions, ss.str());
 }
 
-static tuple<bool, fmt_header, string> is_valid_wav_file()
-	if (!chunk_positions.count("fmt ")) {
-		ss << "no \"fmt \" chunks found";
-		return make_tuple(false, ss.str());
-	}
-	if (chunk_positions["fmt "].data_size < sizeof(fmt_header)) {
-		ss << "not enough bytes to read the format header";
-		return make_tuple(false, ss.str());
-	}
-	wav_file.seekg(chunk_positions["fmt "].start);
-	struct fmt_header fmt;
-	wav_file.read((char *)&fmt, sizeof(fmt));
-
-	// now check the format chunk
-	// first for correct header string "fmt "
-	auto fmt_header = string(header.format, sizeof(header.format));
-	if (fmt_header != "fmt ") {
-		ss << "id of format header contains \"" << fmt_header << "\" instead of \"fmt \"";
-		return make_tuple(false, ss.str());
-	}
-	// only the audio format PCM is supported by lame, so check for it
-	if (header.audio_format != 0x0001) {
-		ss << "unsupported audio format \"";
-		if (audio_format_names.count(header.audio_format)) {
-			ss << audio_format_names[header.audio_format];
+/*!
+ *  Performs all consistency checks for PCM format header to be valid,
+ *  see comments of FormatHeader in riff_format.h
+ *  and "https://msdn.microsoft.com/en-us/library/windows/desktop/dd390970(v=vs.85).aspx"
+ *  returns: if successful: tuple(true, <info string>)
+ *				<info_string>: describes found audio data, e.g. "41.0 kHz, 16 bit, stereo"
+ *                             should be used for info output to the user.
+ *           on failure:    tuple(false, <undefined format_header, <error_message>)
+ *  remark: bits per sample are not enforced to 8 or 16 as long as the value is an integer multiple of 8
+ */
+static tuple<bool, string> check_sane_pcm_or_ieee_float_format_header(const FormatHeader &header) {
+	stringstream ss;
+	// only the audio formats PCM (0x0001) and IEEE FLOAT (0x0003) are supported, so check for it
+	uint16_t pcm_format = audio_format_names_to_uint16["PCM"];
+	uint16_t ieee_float_format = audio_format_names_to_uint16["IEEE FLOAT"];
+	if (!((header.audio_format == pcm_format)
+		|| (header.audio_format == ieee_float_format))) {
+		ss << "unsupported audio format ";
+		if (audio_format_uint16_to_names.count(header.audio_format)) {
+			ss << "\"" << audio_format_uint16_to_names[header.audio_format] << "\" (0x" << setfill('0') << setw(4) << hex << header.audio_format << ")";
 		}
 		else {
-			ss << hex << header.audio_format;
+			ss << "0x" << setfill('0') << setw(4) << hex << header.audio_format;
 		}
-		ss << "\" instead of PCM (0x0001)";
+		ss << " instead of \"PCM\" (0x" << setfill('0') << setw(4) << hex << pcm_format << ")"
+		   << " or \"IEEE FLOAT\" (0x" << setfill('0') << setw(4) << hex << ieee_float_format << ")";
 		return make_tuple(false, ss.str());
 	}
-	auto fmt_header = string(header.format, sizeof(header.format));
-	if (fmt_header != "fmt ") {
-		ss << "id of format header contains \"" << fmt_header << "\" instead of \"fmt \"";
+	// now check for certain dependencies of the format properties a PCM file must fulfill
+	if (header.samples_per_second * header.block_align != header.bytes_per_second) {
+		ss << "bytes per second (" << header.bytes_per_second << ") != ";
+		ss << "samples per second (" << header.samples_per_second << ") * ";
+		ss << "block align (" << header.block_align << ")";
 		return make_tuple(false, ss.str());
 	}
-
+	auto bps = header.bits_per_sample;
+	if (header.audio_format == pcm_format) {
+		if (bps % 8 || bps > 8*sizeof(int64_t)) {
+			ss << "bits per sample of " << bps
+			   << " illegal for \"PCM\"; must be multiple factor of 8 with a maximum of " << 8*sizeof(int64_t);
+			return make_tuple(false, ss.str());
+		}
+	}
+	if (header.audio_format == ieee_float_format) {
+		if (!(bps == 8*sizeof(float) || bps == 8*sizeof(double))) {
+			ss << "bits per sample of " << bps
+			   << " illegal for \"IEEE FLOAT\"; must be 32 or 64";
+			return make_tuple(false, ss.str());
+		}
+	}
+	if (header.audio_format == ieee_float_format)
+	if (header.block_align != header.num_channels * header.bits_per_sample/8) {
+		ss << "block align (" << header.block_align << ") != ";
+		ss << "num of channels (" << header.num_channels << ") * ";
+		ss << "bits per sample (" << header.bits_per_sample << ")/8";
+		return make_tuple(false, ss.str());
+	}
+	// since the header is consistent, generate a descriptive string
+	// for the found data
+	ss << setprecision(4) << (double)header.samples_per_second/1000.0 << " kHz, " << header.bits_per_sample << " bit";
+	// only values of 8 or 16 bits per second seem to be PCM standard
+	if (bps > 16) {
+		ss << " (non-std.)";
+	}
+	ss << ", ";
+	switch (header.num_channels) {
+	case 1:
+		ss << "mono";
+		break;
+	case 2:
+		ss << "stereo";
+		break;
+	default:
+		ss << "illegal number " << header.num_channels << " for channels, must be 1 or 2";
+		return make_tuple(false, ss.str());
+		break;
+	}
+	return make_tuple(true, ss.str());
 }
 
-static tuple<bool, wav_header, const ifstream &> load_wav_file(const fs::path &wav_filename) {
-	auto failed = make_tuple(false, wav_header(), ifstream());
+/*!
+ *  Checks if the chunks in chunk_positions form a valid WAV file.
+ *  The chunk positions to pass can be obtained by calling is_valid_riff_file()
+ *  Checks for a valid WAV file:
+ *      - "fmt " and "data " chunks present
+ *      - enough data present to read the number of bytes claimed
+ *        by the data size identifier of the chunk
+ *      - data payload of "fmt " chunk must be larger than the size of
+ *        FormatHeader (see "riff_format.h")
+ *      - The format header must describe a valid PCM file
+ *        ( see check_sane_pcm_format_header() )
+ *  If successful positions the stream "file" to the beginning of the PCM audio data
+ *  returns: if successful: tuple(true, <valid pcm format header>,
+ *                                <position and length of PCM data as ChunkPosition>,
+ *								  <info string>)
+ *				<info_string>: describes found audio data, e.g. "41.0 kHz, 16 bit, stereo"
+ *                             should be used for info output to the user.
+ *           on failure:    tuple(false, <undefined format_header>,
+ *                                <undefined ChunkPosition object>, <error_message>)
+ */
+static tuple<bool, FormatHeader, ChunkPosition, string> is_valid_wav_file(ifstream &file, ChunkPositionMap &chunk_positions) {
+	stringstream ss;
+	FormatHeader format_header;
+	ChunkPosition data_chunk_payload;
+	// check first if there is a "fmt " chunk
+	if (!chunk_positions.count("fmt ")) {
+		ss << "no \"fmt \" chunk found";
+		return make_tuple(false, format_header, data_chunk_payload, ss.str());
+	}
+	// then make sure there is a data chunk
+	if (!chunk_positions.count("data")) {
+		ss << "no \"data\" chunk found";
+		return make_tuple(false, format_header, data_chunk_payload, ss.str());
+	}
+	// and if it contains enough data to be the format header we expect
+	if (chunk_positions["fmt "].data_size < sizeof(FormatHeader)) {
+		ss << "not enough bytes to read the format header";
+		return make_tuple(false, format_header, data_chunk_payload, ss.str());
+	}
+	// then move pointer to start of data
+	// and read it into the FormatHeader struct
+	file.seekg(chunk_positions["fmt "].start);
+	file.read((char *)&format_header, sizeof(format_header));
+
+	auto [is_header_valid, info_string] = check_sane_pcm_or_ieee_float_format_header(format_header);
+	if (!is_header_valid) {
+		return make_tuple(false, format_header, data_chunk_payload, info_string);
+	}
+	// if this point is reached then the stream points to a valid WAV file
+	// with PCM content
+	// so return the validated FormatHeader structure and the position and length
+	// of the PCM data in the stream in a ChunkPosition structure
+	return make_tuple(true, format_header, chunk_positions["data"], info_string);
+}
+
+/*!
+ *  case insensitive string compare
+ */
+bool case_insensitive_compare(const string& a, const string& b)
+{
+	return std::equal(a.begin(), a.end(),
+		b.begin(), b.end(),
+		// a lambda function as predicate will do
+		[](char a, char b) {
+		return tolower(a) == tolower(b);
+	});
+}
+
+/*!
+ *  Creates the MP3 file and associates it with the passed stream "out_file".
+ *  The path of the MP3 file is generated using the following rules:
+ *     - if in_file_name has a ".wav" file ending replace it by ".mp3",
+ *       if not then just add ".mp3"
+ *       The resulting path is referred to as "<mp3_pathname_base>.mp3"
+ *     - if the path "<mp3_pathname_base>.mp3" already exists,
+ *       then use "<mp3_pathname_base> (1).mp3",
+ *       if that file already exists
+ *       then use "<mp3_pathname_base> (2).mp3" and so on 
+ *  if successful:
+ *       - "out_file" is a valid open stream
+ *       - return: tuple(true, <conversion info string>)
+ *         where <conversion info string> has the form:
+ *           line 1 (if the case) :     "WARNING: <in_file_name> does not end with .wav.\n"
+ *           line 2               :     "<basename of in_file_name> (<in_file_info>) -> <basename of <mp3_pathname_base> (<n>).mp3
+ *  on failure:
+ *       - "out_file" is closed and invalid
+ *       - return: tuple(false, <error message string>)
+ *  examples for <conversion info string>:
+ *  1. Precondition: "wav_folder\test.mp3" does not exist
+ *     Arguments:
+ *		 in_file_name: "wav_folder\test.wav"
+ *       in_file_info: "41.0 kHz, 16 bit, stereo"
+ *     <conversion info string> = "\"test.wav\" (41.0 kHz, 16 bit, stereo) -> \"test.mp3\"
+ *  2. like 1. but
+ *     Precondition: "wav_folder\test.mp3" exists
+ *     <conversion info string> = "\"test.wav\" (41.0 kHz, 16 bit, stereo) -> \"test (1).mp3\"
+ *  3. Precondition: "wav_folder\test._wav_.mp3" does not exist
+ *     Arguments:
+ *		 in_file_name: "wav_folder\test._wav_"
+ *       in_file_info: "41.0 kHz, 16 bit, stereo"
+ *     <conversion info string> = "WARNING: \"test._wav_\" does not end with .wav but is a valid WAV file.\n
+ *                                 \"test._wav_\" (41.0 kHz, 16 bit, stereo) -> \"test._wav_.mp3\"
+ */    
+static tuple<bool, string> open_output_stream(const fs::path &in_file_name, const string &in_file_info, ofstream &out_file) {
+	ostringstream ss;
+	ostringstream status_line;
+	out_file.close();   // just in case there is still a file associated to this stream
+	fs::path mp3_path_base;
+	if (case_insensitive_compare(in_file_name.extension().string(), ".wav")) {
+		mp3_path_base = in_file_name.parent_path() / in_file_name.stem();
+	}
+	else {
+		status_line << "WARNING: \"" << in_file_name.filename().string() << "\" does not end with \".wav\" but is a valid WAV file." << endl << "\t";
+		mp3_path_base = in_file_name;
+	}
+	// Now generate a path for the output file which does not already exist
+	fs::path mp3_path;
 	try {
-		ifstream wav_file;
-		wav_file.open(wav_filename, ios::binary);
-		if (wav_file.fail()) {
-			cerr << "ERROR: Opening \"" << wav_filename.string() << "\" failed, check permissions." << endl;
+		// try all filename from
+		// "<mp3_path_base>.mp3", "<mp3_path_base> (1).mp3" up to
+		// "<mp3_path_base> (655356).mp3"
+		for (uint16_t i = 0; i <= UINT16_MAX; i++) {
+			mp3_path = mp3_path_base;
+			if (i > 0) {
+				ostringstream number;
+				number << " (" << i << ")";
+				mp3_path += fs::path(number.str());
+			}
+			mp3_path += ".mp3";
+			// as soon as a filename does not exist yet
+			if (!fs::exists(mp3_path)) {
+				// try to open it with the passed ofstream object
+				out_file.open(mp3_path, ios::binary | ios::trunc | ios::out);
+				// on failure abort. Most likely the proces has no write permissions
+				if (out_file.fail()) {
+					ss << "creating \"" << mp3_path.string() << "\" for writing";
+					ss << " failed. Check write permission of target directory";
+					out_file.clear();
+					return make_tuple(false, ss.str());
+				}
+				// opening worked, so break the name finding loop
+				break;
+			}
+		}
+	}
+	// if an exception is thrown then something must has gone seriously wrong
+	// e.g. there is no permission to access the parent directory of the path
+	catch (const fs::filesystem_error &e) {
+		ss << "finding a suitable output file name failed: " << e.code().message();
+		return make_tuple(false, ss.str());
+	}
+	if (!out_file.is_open()) {
+		ss << "finding output file name failed.";
+		return make_tuple(false, ss.str());
+	}
+	// reaching that point means that the file was successfully created
+	// and associated to the passed stream => write status message
+	status_line << "\"" << in_file_name.filename().string() << "\"\t";
+	status_line << " (" << in_file_info << ") \t-> ";
+	status_line << "\"" << mp3_path.filename().string() << "\"\t";
+	return make_tuple(true, status_line.str());
+}
+
+
+static tuple<bool, string> convert_file(ifstream &in, ofstream &out, const FormatHeader &header,
+	const ChunkPosition &pcm_data_position) {
+	ostringstream ss;
+	ostringstream lame_error;
+
+	in.seekg(pcm_data_position.start, ios_base::beg);
+
+	LameInit lame_guard;   // Initializes lame on construction and closes it on destruction
+	                       // can be used as first argument of type lame_global_flags for all lame functions
+	if (!lame_guard.is_initialized()){
+		return make_tuple(false, "lame_init() failed");
+	}
+	lame_set_num_channels(lame_guard, header.num_channels);
+	lame_set_in_samplerate(lame_guard, header.samples_per_second);
+	//lame_set_brate(lame_guard, 128);
+	lame_set_mode(lame_guard, header.num_channels == 2 ? JOINT_STEREO : MONO);
+	lame_set_quality(lame_guard, 5);   /* 2=high  5 = medium  7=low */
+	int ret_code = lame_init_params(lame_guard);
+	if (ret_code == -1) {
+		return make_tuple(false, "lame_init_params() failed");
+	}
+	// allocate input buffer for 8192 samples with maximum allowed 
+	const uint32_t number_of_samples = 8192;
+	uint32_t pcm_buffer_size = number_of_samples * header.num_channels;
+	// then allocate the output buffer
+	// formula for the worst case size I found on the internet
+	uint32_t mp3_buffer_size = (uint32_t)(1.25*(double)number_of_samples + 7200.0);
+	unique_ptr<unsigned char> mp3_buffer(new unsigned char[mp3_buffer_size]);
+	
+	uint32_t bytes_per_sample = header.bits_per_sample / 8;
+	uint32_t residual_number_of_samples = pcm_data_position.data_size/bytes_per_sample;
+	int bytes_converted;
+	uint16_t pcm_format = audio_format_names_to_uint16["PCM"];
+	uint16_t ieee_float_format = audio_format_names_to_uint16["IEEE FLOAT"];
+	while (residual_number_of_samples > 0) {
+		uint32_t read_data = residual_number_of_samples > pcm_buffer_size ? pcm_buffer_size : residual_number_of_samples;
+		if (header.audio_format == pcm_format) { // PCM
+			unique_ptr<int32_t> pcm_buffer(new int32_t[pcm_buffer_size]);
+			for (uint32_t i = 0; i < read_data; i++) {
+				int32_t c = 0;
+				if (bytes_per_sample == 1) {
+
+				}
+				in.read((char *)&c, bytes_per_sample);
+				if (bytes_per_sample == 1) {
+					c -= 128;
+				}
+				c <<= (sizeof(int32_t) - bytes_per_sample) * 8;
+				pcm_buffer.get()[i] = c;
+			}
+			if (header.num_channels == 2) {
+				bytes_converted = lame_encode_buffer_interleaved_int(lame_guard, pcm_buffer.get(), read_data / 2, mp3_buffer.get(), mp3_buffer_size);
+			}
+			else {
+				bytes_converted = lame_encode_buffer_int(lame_guard, pcm_buffer.get(), 0, read_data, mp3_buffer.get(), mp3_buffer_size);
+			}
+
+		}
+		else if (header.audio_format == ieee_float_format) { // IEEE_FLOAT
+			unique_ptr<double> pcm_buffer(new double[pcm_buffer_size]);
+			for (uint32_t i = 0; i < read_data; i++) {
+				double c = 0;
+				switch (bytes_per_sample) {
+				case 4:
+					float f;
+					in.read((char *)&f, sizeof(float));
+					c = f; // convert float to double
+					break;
+				case 8 :
+					in.read((char *)&c, sizeof(double));
+					break;
+				default:
+					ss << "unexpected error: illegal bits per sample value " << header.bits_per_sample << " for \"IEEE FLOAT\" format";
+					return make_tuple(false, ss.str());
+				}
+				pcm_buffer.get()[i] = c; 
+			}
+			if (header.num_channels == 2) {
+				bytes_converted = lame_encode_buffer_interleaved_ieee_double(lame_guard, pcm_buffer.get(), read_data / 2, mp3_buffer.get(), mp3_buffer_size);
+			}
+			else {
+				bytes_converted = lame_encode_buffer_ieee_double(lame_guard, pcm_buffer.get(), 0, read_data, mp3_buffer.get(), mp3_buffer_size);
+			}
+
+		}
+		else {
+			ss << "unexpected error: unsupported audio format. Should have been checked by check_sane_pcm_or_ieee_float_format_header()";
+			return make_tuple(false, ss.str());
+		}
+		residual_number_of_samples -= read_data;
+		out.write((char *)mp3_buffer.get(), bytes_converted);
+	}
+	bytes_converted = lame_encode_flush(lame_guard, mp3_buffer.get(), mp3_buffer_size);
+	out.write((char *)mp3_buffer.get(), bytes_converted);
+
+	//int32_t pcm[pcm_buffer_size*header.num]
+
+
+
+
+	return make_tuple(true, string());
+}
+
+static bool convert_file(const fs::path &filename) {
+	auto failed = false;
+	ostringstream ss;
+	try {
+		std::uintmax_t file_size = fs::file_size(filename);
+		ifstream file;
+
+		// open input file
+		file.open(filename, ios::binary);
+		if (file.fail()) {
+			// only print an error if the file name ends with a .wav extension
+			if (case_insensitive_compare(filename.extension().string(), ".wav")) {
+				ss << "\tERROR: Opening \"" << filename.filename().string() << "\" failed, check permissions." << endl;
+				cerr << ss.str();
+			}
 			return failed;
 		}
-		wav_header header;
-		wav_file.read((char*)&header, sizeof(header));
-		if (wav_file.eof() || wav_file.fail()) {
-			cerr << "ERROR: Reading WAV header from \"" << wav_filename.string() << "\" failed." << endl;
+
+		// check if a valid RIFF file
+		auto[chunk_positions, message] = is_valid_riff_file(file, file_size);
+		if (chunk_positions.empty()) {
+			// only print an error if the file name ends with a .wav extension
+			if (case_insensitive_compare(filename.extension().string(), ".wav")) {
+				ss << "\tERROR: \"" << filename.filename().string() << "\" is not a valid RIFF file: " << message << endl;
+				cerr << ss.str();
+			}
 			return failed;
 		}
-		if (string(header.riff_header, sizeof(header.riff_header)) != "RIFF") {
-			cerr << "\"" << wav_filename.string() << "\" is not a WAV file." << endl;
+
+		// check if RIFF file is a valid WAV file with PCM content
+		FormatHeader format_header;
+		ChunkPosition pcm_data_position;
+		bool was_successful;
+		tie(was_successful, format_header, pcm_data_position, message)
+			= is_valid_wav_file(file, chunk_positions);
+		if (!was_successful) {
+			ss << "\t\"" << filename.filename().string() << "\" is not a valid WAV file: " << message << endl;
+			cerr << ss.str();
 			return failed;
 		}
-		return true;
+
+		// create an output file (name chosen such that no existing file is overwritten)
+		ofstream out_file;
+		tie(was_successful, message) = open_output_stream(filename, message, out_file);
+
+		// convert into MP3 file
+		if (was_successful) {
+			string error;
+			tie(was_successful, error) = convert_file(file, out_file, format_header, pcm_data_position);
+			if (was_successful) {
+				ss << "\t" << message << " converted" << endl;
+			}
+			else {
+				ss << "\t" << message << " failed:" << endl;
+				ss << "\t\t" << error << endl;
+			}
+		}
+		else {
+			ss << "\t" << message << endl;
+		}
+
+		// print status of conversion either to cout or cerr
+		(was_successful ? cout : cerr) << ss.str();
+		//cout << "Properties of \"" << filename.string() << "\": " << message << endl;
+		return was_successful;
 	}
 	catch (const exception &e) {
-		cerr << "ERROR: Reading WAV header failed:" << e.what() << endl;
+		ss << "ERROR: converting \"" << filename.filename().string() << "\" failed:" << e.what() << endl;
+		cerr << ss.str();
 		return failed;
 	}
 }
 
-bool convert_wav_file(const fs::path &wav_filename) {
-	bool retval = true;
-	return retval;
-}
-
 bool convert_all_wav_files_in_directory(const fs::recursive_directory_iterator &dir_iter) {
+	ostringstream ss;
 	try {
 		string current_dir_name;
 		for (const fs::directory_entry &entry : dir_iter) {
@@ -180,20 +577,22 @@ bool convert_all_wav_files_in_directory(const fs::recursive_directory_iterator &
 			}
 			auto entry_dir_name = entry.path().parent_path().string();
 			if (current_dir_name != entry_dir_name) {
-				cout << "Processing directory \"" << entry_dir_name << "\"" << endl;
+				ss << "Processing directory \"" << entry_dir_name << "\"" << endl;
+				cout << ss.str();
 				current_dir_name = entry_dir_name;
 			}
 			try {
-				cout << "Processing file: " << entry.path().filename() << endl;
-				load_wav_file(entry.path());
+				convert_file(entry.path());
 			}
 			catch (const exception &e) {
-				cerr << "ERROR: Processing file " << entry.path().filename() << " failed: " << e.what() << endl;
+				ss << "ERROR: Processing file " << entry.path().filename() << " failed: " << e.what() << endl;
+				cerr << ss.str();
 			}
 		}
 	}
 	catch (const exception &e) {
-		cerr << "ERROR: Iterating over files in " << "" << " failed: " << e.what() << endl;
+		ss << "ERROR: Iterating over files in " << "" << " failed: " << e.what() << endl;
+		cerr << ss.str();
 		return false;
 	}
 	return true;

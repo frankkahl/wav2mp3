@@ -3,35 +3,41 @@
 
 #include <string>
 #include <map>
-// WAV header spec information:
-//https://web.archive.org/web/20140327141505/https://ccrma.stanford.edu/courses/422/projects/WaveFormat/
-//http://www.topherlee.com/software/pcm-tut-wavformat.html
-
+#include <cstdint>
+// RIFF reference used:
+// "https://docs.microsoft.com/en-us/windows/desktop/xaudio2/resource-interchange-file-format--riff-"
+// PCM header reference used:
+// "https://msdn.microsoft.com/en-us/library/windows/desktop/dd390970(v=vs.85).aspx"
 
 // forward declaration of map with description strings for audio format codes 
-// contained in wav_header.audio_formats
-extern std::map<short, std::string> audio_format_names;
+// defined in "riff_format.cpp"
+extern std::map<uint16_t, std::string> audio_format_uint16_to_names;
+extern std::map<std::string, uint16_t> audio_format_names_to_uint16;
 
-typedef struct wav_header {
-	// RIFF Header
-	char riff_header[4]; // Contains "RIFF"
-	int wav_size; // Size of the wav portion of the file, which follows the first 8 bytes. File size - 8
-	char format[4]; // should contain "WAVE" in case of a WAV file
+// RIFF header
 
-	// Format Header
-	char fmt_header[4]; // Contains "fmt " (includes trailing space)
-	int fmt_chunk_size; // Should be 16 for PCM
-	short audio_format; // Should be 1 for PCM. 3 for IEEE Float
-	short num_channels;
-	int sample_rate;
-	int byte_rate; // Number of bytes per second. sample_rate * num_channels * Bytes Per Sample
-	short sample_alignment; // num_channels * Bytes Per Sample
-	short bit_depth; // Number of bits per sample
+typedef struct RiffHeader {
+	char riff_id[4];                // RIFF FOURCC identifier, must contains "RIFF"
+	uint32_t total_data_size;       // size of all valid data following this entry in file
+	                                // usually this is file size - 8, but that is not guaranteed
+	char format[4];                 // should contain "WAVE" in case of a WAV file
+} RiffHeader;
 
-	// Data
-	char data_header[4]; // Contains "data"
-	int data_bytes; // Number of bytes in data. Number of samples * num_channels * sample byte size
-	// uint8_t bytes[]; // Remainder of wave file is bytes
-} wav_header;
+
+typedef struct FormatHeader {
+	std::uint16_t audio_format;		// must be 0x0001 for PCM
+	std::uint16_t num_channels;		// should be 1 for mono and 2 for stereo, not sure if
+	                                // larger numbers are allowed
+	std::uint32_t samples_per_second;
+	std::uint32_t bytes_per_second; // Number of bytes per second.
+	                                // For PCM must be
+	                                // = block_align*samples_per_second
+	std::uint16_t block_align;      // minimum atomic unit of data
+	                                // for PCM this must be
+	                                // = num_channels * bits_per_sample/8
+	std::uint16_t bits_per_sample;  // number of bits per sample
+									// must be an integer multiple of 8
+	                                // for PCM only 8 or 16 are allowed
+} FormatHeader;
 
 #endif // WAV_HEADER_H

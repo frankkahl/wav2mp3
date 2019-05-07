@@ -5,13 +5,8 @@
 #ifndef CONVERT_WAV_FILES_H
 #define CONVERT_WAV_FILES_H
 
-// forward declaration instead of including <filesystem>
-// to avoid unnecessary namespace pollution of cpp files including this header
-namespace std {
-	namespace filesystem {
-		class recursive_directory_iterator;
-	}
-}
+#include <filesystem>   // forward declarations could be used here but they can be very error prone, see:
+                        // https://google.github.io/styleguide/cppguide.html#Forward_Declarations
 
 /*!
  * convert all WAV files in the directory the passed iterator points to into MP3 files

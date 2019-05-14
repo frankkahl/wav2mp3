@@ -20,6 +20,7 @@ set(CPPFILES
   "${SOURCES}/convert_wav_files.cpp"
   "${SOURCES}/riff_format.cpp"
   "${SOURCES}/lame_wrapper.cpp"
+  "${SOURCES}/guid.cpp"
   )
 
 set(HFILES
@@ -28,7 +29,8 @@ set(HFILES
   "${SOURCES}/convert_wav_files.h"
   "${SOURCES}/riff_format.h"
   "${SOURCES}/lame_wrapper.h"
-  )
+  "${SOURCES}/guid.h"
+ )
 
 include_directories("${HEADERS}")
 include_directories("${LAME_DIR}/include")

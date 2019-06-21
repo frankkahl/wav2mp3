@@ -21,6 +21,7 @@ set(CPPFILES
   "${SOURCES}/riff_format.cpp"
   "${SOURCES}/lame_wrapper.cpp"
   "${SOURCES}/guid.cpp"
+  "${SOURCES}/tiostream.cpp"
   )
 
 set(HFILES
@@ -30,6 +31,13 @@ set(HFILES
   "${SOURCES}/riff_format.h"
   "${SOURCES}/lame_wrapper.h"
   "${SOURCES}/guid.h"
+  "${SOURCES}/thread_pool_impl.h"
+  "${SOURCES}/thread_pool.h"
+  "${SOURCES}/thread_queue_impl.h"
+  "${SOURCES}/thread_queue.h"
+  "${SOURCES}/tiostream.h"
+
+
  )
 
 include_directories("${HEADERS}")

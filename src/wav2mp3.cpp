@@ -5,13 +5,27 @@
 #include "argument_processing.h"
 #include "convert_wav_files.h"
 #include "pthread.h"
+#include "riff_format.h"
+//#include "thread_pool.h"
 
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <string>
 
-#include "riff_format.h"
+//int task(const std::uint16_t thread_number) {
+//    std::ostringstream ss;
+//    ss << "(" << thread_number << ") Start" << std::endl;
+//    tcout << ss.str();
+//    std::this_thread::sleep_for(2s);
+//    ss.str("");
+//    ss << "(" << thread_number << ") Stop after 2s " << std::endl;
+//    tcout << ss.str();
+//    if (thread_number == 3) {
+//        throw std::exception("TestException");
+//    }
+//    return thread_number * 100;
+//}
 
 using namespace std;
 namespace fs = std::filesystem;
@@ -27,7 +41,27 @@ int main(int argc, const char* argv[]) {
     // sizeof(Guid) << endl; return 0;
     setlocale(LC_ALL, "");  // switch everything from the minimal "C" locale to the environments default locale to
                             // ensure that all diacritical letters like Umlaute are displayed properly under Windows
-
+    //ThreadPool<int> tp;
+    //std::vector<std::future<int> > futures;
+    //for (int i = 0; i < 12; i++) {
+    //    futures.push_back(tp.enqueue(&task));
+    //}
+    //for (std::size_t i = 0; i < futures.size(); i++) {
+    //    try {
+    //        std::ostringstream ss;
+    //        ss << "(main) future # " << i << ": " << futures[i].get() << std::endl;
+    //        tcout << ss.str();
+    //    } catch (const std::exception& exc) {
+    //        std::ostringstream ss;
+    //        ss << "(main) future # " << i << ": exception thrown: " << exc.what() << std::endl;
+    //        tcerr << ss.str();
+    //    } catch (...) {
+    //        std::ostringstream ss;
+    //        ss << "(main) future # " << i << ": exception thrown" << std::endl;
+    //        tcerr << ss.str();
+    //    }
+    //}
+    //return 0;
     auto& dir_iter = check_arguments(argc, argv);
     if (dir_iter == fs::end(dir_iter)) {
         return -1;

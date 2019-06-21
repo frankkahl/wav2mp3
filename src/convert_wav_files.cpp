@@ -17,6 +17,7 @@
 
 #include "lame_wrapper.h"
 #include "riff_format.h"
+#include "thread_pool.h"
 
 #include <cstdint>
 #include <exception>
@@ -27,6 +28,7 @@
 #include <set>
 #include <sstream>
 #include <tuple>
+#include <functional>
 
 namespace fs = std::filesystem;
 using namespace std;
@@ -35,7 +37,7 @@ using namespace std;
 // of a chunk
 typedef struct ChunkPosition {
     std::streampos start;       // position to pass to ifstream::seekg(...) to move file pointer to beggining of chunk data
-    std::streamsize data_size;  // size of chunk data.
+    std::streamsize data_size = 0;  // size of chunk data.
 } ChunkPosition;
 
 // helper type mapping the chunk id to the position information of its data
@@ -375,7 +377,7 @@ static tuple<bool, string> open_output_stream(const fs::path &in_file_name, cons
         // try all filename from
         // "<mp3_path_base>.mp3", "<mp3_path_base> (1).mp3" up to
         // "<mp3_path_base> (655356).mp3"
-        for (uint16_t i = 0; i <= UINT16_MAX; i++) {
+        for (uint16_t i = 0; i < UINT16_MAX; ++i) {
             mp3_path = mp3_path_base;
             if (i > 0) {
                 ostringstream number;
@@ -417,16 +419,24 @@ static tuple<bool, string> open_output_stream(const fs::path &in_file_name, cons
     return make_tuple(true, status_line.str());
 }
 
-static tuple<bool, string> convert_file(ifstream &in, ofstream &out, const FormatHeaderExtensible &header_extensible, const ChunkPosition &pcm_data_position) {
-    ostringstream ss;
-    ostringstream lame_error;
+static tuple<bool, string> convert_file_worker(shared_ptr<ifstream> in, shared_ptr<ofstream> out, const FormatHeaderExtensible header_extensible,
+                                               const ChunkPosition pcm_data_position, string message, uint16_t thread_number) {
+    string error;
     const FormatHeader &header = header_extensible.header;
-    in.seekg(pcm_data_position.start, ios_base::beg);
+    in->seekg(pcm_data_position.start, ios_base::beg);
 
+    auto print_error = [&message](const string &error) {
+        ostringstream ss;
+        ss << "\t " << message << endl;
+        ss << "\t\t  " << error << endl;
+        tcerr << ss.str();
+    };
     LameInit lame_guard;  // Initializes lame on construction and closes it on destruction
                           // can be used as first argument of type lame_global_flags for all lame functions
     if (!lame_guard.is_initialized()) {
-        return make_tuple(false, "lame_init() failed");
+        error = "lame_init() failed";
+        print_error(error);
+        return make_tuple(false, error);
     }
     lame_set_num_channels(lame_guard, header.num_channels);
     lame_set_in_samplerate(lame_guard, header.samples_per_second);
@@ -435,7 +445,9 @@ static tuple<bool, string> convert_file(ifstream &in, ofstream &out, const Forma
     lame_set_quality(lame_guard, 5); /* 2=high  5 = medium  7=low */
     int ret_code = lame_init_params(lame_guard);
     if (ret_code == -1) {
-        return make_tuple(false, "lame_init_params() failed");
+        error = "lame_init_params() failed";
+        print_error(error);
+        return make_tuple(false, error);
     }
     // allocate input buffer for 8192 samples with maximum allowed bit size
     const uint32_t number_of_samples = 8192;
@@ -463,7 +475,7 @@ static tuple<bool, string> convert_file(ifstream &in, ofstream &out, const Forma
             unique_ptr<int32_t> pcm_buffer(new int32_t[pcm_buffer_size]);
             for (uint32_t i = 0; i < read_data; i++) {
                 int32_t c = 0;
-                in.read((char *)&c, bytes_per_sample);
+                in->read((char *)&c, bytes_per_sample);
                 if (bytes_per_sample == 1) {
                     c -= 128;
                 }
@@ -485,15 +497,17 @@ static tuple<bool, string> convert_file(ifstream &in, ofstream &out, const Forma
                 switch (bytes_per_sample) {
                     case 4:
                         float f;
-                        in.read((char *)&f, sizeof(float));
+                        in->read((char *)&f, sizeof(float));
                         c = f;  // convert float to double
                         break;
                     case 8:
-                        in.read((char *)&c, sizeof(double));
+                        in->read((char *)&c, sizeof(double));
                         break;
                     default:
-                        ss << "unexpected error: illegal bits per sample value " << header.bits_per_sample << " for \"IEEE FLOAT\" format";
-                        return make_tuple(false, ss.str());
+                        ostringstream err;
+                        err << "unexpected error: illegal bits per sample value " << header.bits_per_sample << " for \"IEEE FLOAT\" format";
+                        print_error(err.str());
+                        return make_tuple(false, err.str());
                 }
                 pcm_buffer.get()[i] = c;
             }
@@ -504,30 +518,34 @@ static tuple<bool, string> convert_file(ifstream &in, ofstream &out, const Forma
             }
 
         } else {
-            ss << "unexpected error: unsupported audio format. Should have been checked by check_sane_pcm_or_ieee_float_format_header()";
-            return make_tuple(false, ss.str());
+            error = "unexpected error: unsupported audio format. Should have been checked by check_sane_pcm_or_ieee_float_format_header()";
+            print_error(error);
+            return make_tuple(false, error);
         }
         residual_number_of_samples -= read_data;
-        out.write((char *)mp3_buffer.get(), bytes_converted);
+        out->write((char *)mp3_buffer.get(), bytes_converted);
     }
     bytes_converted = lame_encode_flush(lame_guard, mp3_buffer.get(), mp3_buffer_size);
-    out.write((char *)mp3_buffer.get(), bytes_converted);
+    out->write((char *)mp3_buffer.get(), bytes_converted);
 
     // int32_t pcm[pcm_buffer_size*header.num]
 
+    ostringstream ss;
+    ss << "\t" << message << " converted" << endl;
+    tcout << ss.str();
     return make_tuple(true, string());
 }
 
-static bool convert_file(const fs::path &filename) {
+static bool convert_file(const fs::path &filename, ThreadPool< std::tuple<bool, std::string> > &thread_pool) {
     auto failed = false;
     ostringstream ss;
     try {
         std::uintmax_t file_size = fs::file_size(filename);
-        ifstream file;
+        shared_ptr<ifstream> file(new ifstream());
 
         // open input file
-        file.open(filename, ios::binary);
-        if (file.fail()) {
+        file->open(filename, ios::binary);
+        if (file->fail()) {
             // only print an error if the file name ends with a .wav extension
             if (case_insensitive_compare(filename.extension().string(), ".wav")) {
                 ss << "\tERROR: Opening \"" << filename.filename().string() << "\" failed, check permissions." << endl;
@@ -537,7 +555,7 @@ static bool convert_file(const fs::path &filename) {
         }
 
         // check if a valid RIFF file
-        auto [chunk_positions, message] = is_valid_riff_file(file, file_size);
+        auto [chunk_positions, message] = is_valid_riff_file(*file, file_size);
         
         if (chunk_positions.empty()) {
             // only print an error if the file name ends with a .wav extension
@@ -552,7 +570,7 @@ static bool convert_file(const fs::path &filename) {
         FormatHeaderExtensible format_header;
         ChunkPosition pcm_data_position;
         bool was_successful;
-        tie(was_successful, format_header, pcm_data_position, message) = is_valid_wav_file(file, chunk_positions);
+        tie(was_successful, format_header, pcm_data_position, message) = is_valid_wav_file(*file, chunk_positions);
         if (!was_successful) {
             ss << "\t\"" << filename.filename().string() << "\" is not a valid WAV file: " << message << endl;
             cerr << ss.str();
@@ -560,36 +578,32 @@ static bool convert_file(const fs::path &filename) {
         }
 
         // create an output file (name chosen such that no existing file is overwritten)
-        ofstream out_file;
-        tie(was_successful, message) = open_output_stream(filename, message, out_file);
+        shared_ptr< ofstream > out_file(new ofstream());
+        tie(was_successful, message) = open_output_stream(filename, message, *out_file);
 
         // convert into MP3 file
         if (was_successful) {
             string error;
-            tie(was_successful, error) = convert_file(file, out_file, format_header, pcm_data_position);
-            if (was_successful) {
-                ss << "\t" << message << " converted" << endl;
-            } else {
-                ss << "\t" << message << " failed:" << endl;
-                ss << "\t\t" << error << endl;
-            }
+            using std::placeholders::_1;
+            function<tuple<bool, string>(const std::uint16_t)> fct = bind(convert_file_worker, file, out_file, format_header, pcm_data_position, message, _1);
+            thread_pool.enqueue(fct);
         } else {
             ss << "\t" << message << endl;
+            tcerr << ss.str();
         }
 
-        // print status of conversion either to cout or cerr
-        (was_successful ? cout : cerr) << ss.str();
         // cout << "Properties of \"" << filename.string() << "\": " << message << endl;
         return was_successful;
     } catch (const exception &e) {
         ss << "ERROR: converting \"" << filename.filename().string() << "\" failed:" << e.what() << endl;
-        cerr << ss.str();
+        tcerr << ss.str();
         return failed;
     }
 }
 
 bool convert_all_wav_files_in_directory(const fs::recursive_directory_iterator &dir_iter) {
     ostringstream ss;
+    ThreadPool<tuple<bool, std::string> > thread_pool;
     try {
         string current_dir_name;
         for (const fs::directory_entry &entry : dir_iter) {
@@ -603,7 +617,7 @@ bool convert_all_wav_files_in_directory(const fs::recursive_directory_iterator &
                 current_dir_name = entry_dir_name;
             }
             try {
-                convert_file(entry.path());
+                convert_file(entry.path(), thread_pool);
             } catch (const exception &e) {
                 ss << "ERROR: Processing file " << entry.path().filename() << " failed: " << e.what() << endl;
                 cerr << ss.str();

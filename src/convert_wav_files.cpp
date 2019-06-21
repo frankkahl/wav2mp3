@@ -18,6 +18,7 @@
 #include "lame_wrapper.h"
 #include "riff_format.h"
 #include "thread_pool.h"
+#include "signal_handler.h"
 
 #include <cstdint>
 #include <exception>
@@ -143,11 +144,11 @@ static tuple<ChunkPositionMap, string> is_valid_riff_file(ifstream &file, const 
             break;
         }
     }
-    cout << "--- found chunks: ";
-    for (auto const &[key, value] : chunk_positions) {
-        cout << '"' << key << '"' << "  ";
-    }
-    cout << endl;
+    //cout << "--- found chunks: ";
+    //for (auto const &[key, value] : chunk_positions) {
+    //    cout << '"' << key << '"' << "  ";
+    //}
+    //cout << endl;
     return make_tuple(chunk_positions, ss.str());
 }
 
@@ -360,7 +361,7 @@ bool case_insensitive_compare(const string &a, const string &b) {
  *     <conversion info string> = "WARNING: \"test._wav_\" does not end with .wav but is a valid WAV file.\n
  *                                 \"test._wav_\" (41.0 kHz, 16 bit, stereo) -> \"test._wav_.mp3\"
  */
-static tuple<bool, string> open_output_stream(const fs::path &in_file_name, const string &in_file_info, ofstream &out_file) {
+static tuple<bool, string> open_output_stream(const fs::path &in_file_name, const string &in_file_info, ofstream &out_file, fs::path &mp3_path) {
     ostringstream ss;
     ostringstream status_line;
     out_file.close();  // just in case there is still a file associated to this stream
@@ -372,7 +373,7 @@ static tuple<bool, string> open_output_stream(const fs::path &in_file_name, cons
         mp3_path_base = in_file_name;
     }
     // Now generate a path for the output file which does not already exist
-    fs::path mp3_path;
+    // fs::path mp3_path;
     try {
         // try all filename from
         // "<mp3_path_base>.mp3", "<mp3_path_base> (1).mp3" up to
@@ -419,16 +420,17 @@ static tuple<bool, string> open_output_stream(const fs::path &in_file_name, cons
     return make_tuple(true, status_line.str());
 }
 
-static tuple<bool, string> convert_file_worker(shared_ptr<ifstream> in, shared_ptr<ofstream> out, const FormatHeaderExtensible header_extensible,
+static tuple<bool, string> convert_file_worker(shared_ptr<ifstream> in, shared_ptr<ofstream> out, const fs::path out_filename, const FormatHeaderExtensible header_extensible,
                                                const ChunkPosition pcm_data_position, string message, uint16_t thread_number) {
     string error;
     const FormatHeader &header = header_extensible.header;
     in->seekg(pcm_data_position.start, ios_base::beg);
-
-    auto print_error = [&message](const string &error) {
+    // define lambda expression to avoid repetetive code for reporting
+    // errors
+    auto print_error = [&message, thread_number](const string &error) {
         ostringstream ss;
-        ss << "\t " << message << endl;
-        ss << "\t\t  " << error << endl;
+        ss << "\t (" << thread_number << ") " << message << "failed: " << endl;
+        ss << "\t\t " << error << endl;
         tcerr << ss.str();
     };
     LameInit lame_guard;  // Initializes lame on construction and closes it on destruction
@@ -440,7 +442,6 @@ static tuple<bool, string> convert_file_worker(shared_ptr<ifstream> in, shared_p
     }
     lame_set_num_channels(lame_guard, header.num_channels);
     lame_set_in_samplerate(lame_guard, header.samples_per_second);
-    // lame_set_brate(lame_guard, 128);
     lame_set_mode(lame_guard, header.num_channels == 2 ? JOINT_STEREO : MONO);
     lame_set_quality(lame_guard, 5); /* 2=high  5 = medium  7=low */
     int ret_code = lame_init_params(lame_guard);
@@ -524,6 +525,13 @@ static tuple<bool, string> convert_file_worker(shared_ptr<ifstream> in, shared_p
         }
         residual_number_of_samples -= read_data;
         out->write((char *)mp3_buffer.get(), bytes_converted);
+        // check after each converted chunk if the user pressed Ctrl-C (SIGINT) or SIGTERM was sent
+        if (SignalHandler::termination_requested()) {
+            out->close();
+            std::error_code ec;
+            fs::remove(out_filename, ec); // try to delete the incomplete MP3 file, but do not make a fuzz about failing
+            return make_tuple(false, error);
+        }
     }
     bytes_converted = lame_encode_flush(lame_guard, mp3_buffer.get(), mp3_buffer_size);
     out->write((char *)mp3_buffer.get(), bytes_converted);
@@ -531,7 +539,7 @@ static tuple<bool, string> convert_file_worker(shared_ptr<ifstream> in, shared_p
     // int32_t pcm[pcm_buffer_size*header.num]
 
     ostringstream ss;
-    ss << "\t" << message << " converted" << endl;
+    ss << "\t (" << thread_number << ") " << message << " converted" << endl;
     tcout << ss.str();
     return make_tuple(true, string());
 }
@@ -548,8 +556,9 @@ static bool convert_file(const fs::path &filename, ThreadPool< std::tuple<bool, 
         if (file->fail()) {
             // only print an error if the file name ends with a .wav extension
             if (case_insensitive_compare(filename.extension().string(), ".wav")) {
-                ss << "\tERROR: Opening \"" << filename.filename().string() << "\" failed, check permissions." << endl;
-                cerr << ss.str();
+                ss.str("");
+                ss << "\t (main) ERROR: Opening \"" << filename.filename().string() << "\" failed, check permissions." << endl;
+                tcerr << ss.str();
             }
             return failed;
         }
@@ -560,8 +569,9 @@ static bool convert_file(const fs::path &filename, ThreadPool< std::tuple<bool, 
         if (chunk_positions.empty()) {
             // only print an error if the file name ends with a .wav extension
             if (case_insensitive_compare(filename.extension().string(), ".wav")) {
-                ss << "\tERROR: \"" << filename.filename().string() << "\" is not a valid RIFF file: " << message << endl;
-                cerr << ss.str();
+                ss.str("");
+                ss << "\t (main) ERROR: \"" << filename.filename().string() << "\" is not a valid RIFF file: " << message << endl;
+                tcerr << ss.str();
             }
             return failed;
         }
@@ -572,30 +582,34 @@ static bool convert_file(const fs::path &filename, ThreadPool< std::tuple<bool, 
         bool was_successful;
         tie(was_successful, format_header, pcm_data_position, message) = is_valid_wav_file(*file, chunk_positions);
         if (!was_successful) {
-            ss << "\t\"" << filename.filename().string() << "\" is not a valid WAV file: " << message << endl;
-            cerr << ss.str();
+            ss.str("");
+            ss << "\t (main) \"" << filename.filename().string() << "\" is not a valid WAV file: " << message << endl;
+            tcerr << ss.str();
             return failed;
         }
 
         // create an output file (name chosen such that no existing file is overwritten)
         shared_ptr< ofstream > out_file(new ofstream());
-        tie(was_successful, message) = open_output_stream(filename, message, *out_file);
+        fs::path out_filename;
+        tie(was_successful, message) = open_output_stream(filename, message, *out_file, out_filename);
 
         // convert into MP3 file
         if (was_successful) {
             string error;
             using std::placeholders::_1;
-            function<tuple<bool, string>(const std::uint16_t)> fct = bind(convert_file_worker, file, out_file, format_header, pcm_data_position, message, _1);
+            function<tuple<bool, string>(const std::uint16_t)> fct = bind(convert_file_worker, file, out_file, out_filename, format_header, pcm_data_position, message, _1);
             thread_pool.enqueue(fct);
         } else {
-            ss << "\t" << message << endl;
+            ss.str("");
+            ss << "\t (main) " << message << endl;
             tcerr << ss.str();
         }
 
         // cout << "Properties of \"" << filename.string() << "\": " << message << endl;
         return was_successful;
     } catch (const exception &e) {
-        ss << "ERROR: converting \"" << filename.filename().string() << "\" failed:" << e.what() << endl;
+        ss.str("");
+        ss << "\t (main) ERROR: converting \"" << filename.filename().string() << "\" failed:" << e.what() << endl;
         tcerr << ss.str();
         return failed;
     }
@@ -607,27 +621,35 @@ bool convert_all_wav_files_in_directory(const fs::recursive_directory_iterator &
     try {
         string current_dir_name;
         for (const fs::directory_entry &entry : dir_iter) {
+            // if the user sends SITERM or presses Ctrl-C, sending SIGINT,
+            // abort processing
+            if (SignalHandler::termination_requested()) {
+                break;
+            }
             if (fs::is_directory(entry)) {
                 continue;
             }
             auto entry_dir_name = entry.path().parent_path().string();
             if (current_dir_name != entry_dir_name) {
+                ss.str("");
                 ss << "Processing directory \"" << entry_dir_name << "\"" << endl;
-                cout << ss.str();
+                tcout << ss.str();
                 current_dir_name = entry_dir_name;
             }
             try {
                 convert_file(entry.path(), thread_pool);
             } catch (const exception &e) {
+                ss.str("");
                 ss << "ERROR: Processing file " << entry.path().filename() << " failed: " << e.what() << endl;
-                cerr << ss.str();
+                tcerr << ss.str();
             }
         }
     } catch (const exception &e) {
+        ss.str("");
         ss << "ERROR: Iterating over files in "
            << ""
            << " failed: " << e.what() << endl;
-        cerr << ss.str();
+        tcerr << ss.str();
         return false;
     }
     return true;

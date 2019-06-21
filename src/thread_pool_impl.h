@@ -5,6 +5,7 @@
 #include <future>
 #include <iostream>
 #include <sstream>
+#include "signal_handler.h"
 #include "thread_pool.h"
 #include "tiostream.h"
 
@@ -16,11 +17,13 @@ ThreadPool<T>::ThreadPool(const std::uint16_t num_of_threads) : _threads(num_of_
         throw std::invalid_argument(ss.str());
     }
     start_all_threads();
+    std::cout << "Thread pool started with " << num_of_threads << " threads." << std::endl;
 };
 
 template <typename T>
 ThreadPool<T>::~ThreadPool() {
     stop_all_threads();
+    std::cout << "Thread pool stopped." << std::endl;
 };
 
 template <typename T>
@@ -72,17 +75,10 @@ void ThreadPool<T>::notify_being_idle(const std::uint16_t thread_number) {
 
 template <typename T>
 void ThreadPool<T>::thread_method(const std::uint16_t thread_number) {
-    std::ostringstream ss;
-    std::uint32_t command_counter = 0;
-    ss << "(" << thread_number << ") starting" << std::endl;
-    tcout << ss.str();
     while (true) {
         notify_being_idle(thread_number);
         auto function_to_execute = _threads[thread_number].queue.dequeue();
         if (function_to_execute == nullptr) {
-            ss.str("");
-            ss << "(" << thread_number << ") stopping." << std::endl;
-            tcout << ss.str();
             return;
         }
         // execute the received function and store its result or the thrown exception
@@ -92,22 +88,16 @@ void ThreadPool<T>::thread_method(const std::uint16_t thread_number) {
             T res = function_to_execute(thread_number);
             // if this point is reached no exception has been thrown
             _threads[thread_number].promise.set_value(res);
-            //ss.str("");
-            //ss << "(" << thread_number << ") return value: " << res << std::endl;
-            tcout << ss.str();
         } catch (...) {
-            ss.str("");
+            std::ostringstream ss;
             ss << "(" << thread_number << ") exception thrown" << std::endl;
             tcerr << ss.str();
             auto exc = std::current_exception();
             try {
                 _threads[thread_number].promise.set_exception(exc);
-            } catch (...) { // just make sure that the thread is not terminated by an escaping exception
+            } catch (...) {  // just make sure that the thread is not terminated by an escaping exception
             }
         }
-        ss.str("");
-        ss << "(" << thread_number << ") command #" << ++command_counter << " executed." << std::endl;
-        tcout << ss.str();
     }
 }
 

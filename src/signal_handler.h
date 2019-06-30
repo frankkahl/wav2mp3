@@ -1,7 +1,7 @@
 #ifndef SIGNAL_HANDLER
 #define SIGNAL_HANDLER
 
-#include <mutex>
+#include "thread_includes.h"
 
 class SignalHandler {
    public:

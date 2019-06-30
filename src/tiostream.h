@@ -3,14 +3,14 @@
 
 #include <iostream>
 #include <string>
-#include <mutex>
+#include "thread_includes.h"
 
 class tostream {
    public:
     tostream(std::ostream &stream);
     template <typename T>
     tostream &operator<<(const T &out) {
-        std::lock_guard guard(_mutex);
+        std::lock_guard<std::mutex> guard(_mutex);
         _stream << out;
         return *this;
     }

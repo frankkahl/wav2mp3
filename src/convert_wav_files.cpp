@@ -19,6 +19,7 @@
 #include "riff_format.h"
 #include "thread_pool.h"
 #include "signal_handler.h"
+#include "tiostream.h"
 
 #include <cstdint>
 #include <exception>
@@ -544,7 +545,7 @@ static tuple<bool, string> convert_file_worker(shared_ptr<ifstream> in, shared_p
     return make_tuple(true, string());
 }
 
-static bool convert_file(const fs::path &filename, ThreadPool< std::tuple<bool, std::string> > &thread_pool) {
+static bool convert_file(const fs::path &filename, ThreadPool &thread_pool) {
     auto failed = false;
     ostringstream ss;
     try {
@@ -617,7 +618,7 @@ static bool convert_file(const fs::path &filename, ThreadPool< std::tuple<bool, 
 
 bool convert_all_wav_files_in_directory(const fs::recursive_directory_iterator &dir_iter) {
     ostringstream ss;
-    ThreadPool<tuple<bool, std::string> > thread_pool;
+    ThreadPool thread_pool;
     try {
         string current_dir_name;
         for (const fs::directory_entry &entry : dir_iter) {

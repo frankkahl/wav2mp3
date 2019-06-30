@@ -1,5 +1,4 @@
 #include "thread_queue.h"
-#include <mutex>
 
 using namespace std;
 

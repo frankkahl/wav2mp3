@@ -3,14 +3,12 @@
 
 #include "thread_queue.h"
 
-#include <condition_variable>
-#include <cstdint>
-#include <future>
-#include <memory>
-#include <thread>
-#include <vector>
-#include <functional>
+#include "thread_includes.h"
 
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <vector>
 
 // implements a pool of threads
 // allows to queue a function to be executed by a worker thread
@@ -18,7 +16,6 @@
 // The queuing method "enqueue" blocks until one of the worker threads gets idle
 // and is ready to immediately process the function
 
-template <typename T>
 class ThreadPool {
    public:
     ThreadPool(const std::uint16_t num_of_threads = std::thread::hardware_concurrency());
@@ -30,21 +27,23 @@ class ThreadPool {
     // of type T
     // if all threads are currently busy the method waits until one becomes idle
     // returns a future to this result
-    std::future<T> enqueue(std::function<T(const std::uint16_t)> function_to_execute);
+    void enqueue(std::function<void(const std::uint16_t)> function_to_execute);
 
    private:  // private typedefs
-             // struct which stores the actual std::thread, a queue for communicating
-             // with it and the promise to store the result the function executed
-             // by the thread
+             // struct which stores the actual std::thread and a queue for communicating
+             // with it
     typedef struct Thread {
         std::shared_ptr<std::thread> thread;
-        ThreadQueue<std::function<T(const std::uint16_t)> > queue;
-        std::promise<T> promise;
+        ThreadQueue<std::function<void(const std::uint16_t)> > queue;
     } Thread;
 
    private:  // private methods
-    // thread method to execute in a worker thread. The number of the particular thread is passed as an argument
-    void thread_method(const std::uint16_t thread_number);
+    typedef struct ThreadArguments {
+        ThreadPool *thread_pool;
+        std::uint16_t thread_number;
+    } ThreadArguments;
+    // static thread function to execute in a worker thread. The number of the particular thread is passed as an argument
+    static void *thread_function(void *arg_ptr);
     // returns the next idle worker thread. Waits until one becomes idle if necessary
     // returns the number of the idle thread
     int get_next_idle_thread();
@@ -63,8 +62,11 @@ class ThreadPool {
                                                     // thread number
     ThreadQueue<unsigned int> _idle_threads_queue;  // used by the threads to send their number
                                                     // to the main thread when they become idle
-};
+    condition_variable _thread_args_copied;         // used to signal the condition that the thread function has copied the content
+                                                    // of the passed ThreadArguments instance so that it can go out of scope
+    mutex _thread_args_copied_mutex;                // mutex to use in conjunction with _thread_args_copied
 
-#include "thread_pool_impl.h"
+
+};
 
 #endif  // THREADPOOL_H

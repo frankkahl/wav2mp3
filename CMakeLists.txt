@@ -1,6 +1,6 @@
 ﻿cmake_minimum_required(VERSION 3.14)
 project ("wav2mp3")
-
+#message(STATUS "----------------ksjfsldkfjlsd ------------------")
 add_definitions(-DUNICODE)
 add_definitions(-D_UNICODE)
 
@@ -14,6 +14,8 @@ set(PTHREADS_DIR "pthreads")
 set(SOURCES "src")
 set(HEADERS "src")
 
+#add_compile_definitions(USE_PTHREAD)
+
 set(CPPFILES
   "${SOURCES}/wav2mp3.cpp"
   "${SOURCES}/argument_processing.cpp"
@@ -21,7 +23,9 @@ set(CPPFILES
   "${SOURCES}/riff_format.cpp"
   "${SOURCES}/lame_wrapper.cpp"
   "${SOURCES}/guid.cpp"
+  "${SOURCES}/thread_pool.cpp"
   "${SOURCES}/tiostream.cpp"
+  "${SOURCES}/signal_handler.cpp"
   )
 
 set(HFILES
@@ -31,14 +35,33 @@ set(HFILES
   "${SOURCES}/riff_format.h"
   "${SOURCES}/lame_wrapper.h"
   "${SOURCES}/guid.h"
-  "${SOURCES}/thread_pool_impl.h"
   "${SOURCES}/thread_pool.h"
   "${SOURCES}/thread_queue_impl.h"
   "${SOURCES}/thread_queue.h"
   "${SOURCES}/tiostream.h"
-
-
+  "${SOURCES}/signal_handler.h"
+  "${SOURCES}/thread_includes.h"
  )
+
+if(DEFINED USE_PTHREAD)
+    message(STATUS "Using pthreads")
+    add_compile_definitions(USE_PTHREAD)
+    set(CPPFILES
+      ${CPPFILES}
+      "${SOURCES}/mutex.cpp"
+      "${SOURCES}/condition_variable.cpp"
+      "${SOURCES}/thread.cpp"
+      #"${SOURCES}/hardware_concurrency.cpp"
+      )
+
+    set(HFILES
+      ${HFILES}
+      "${SOURCES}/mutex.h"
+      "${SOURCES}/condition_variable.h"
+      "${SOURCES}/thread.h"
+      #"${SOURCES}/hardware_concurrency.h"
+     )
+endif(DEFINED USE_PTHREAD)
 
 include_directories("${HEADERS}")
 include_directories("${LAME_DIR}/include")

@@ -5,7 +5,8 @@
 
 namespace std {
 // minimum functionality of the mutex class of the C++ 11 threading library
-// required for this application reimplemented using
+// required for this application
+// implemented using the pthreads libaray
 
 class condition_variable;
 
@@ -37,7 +38,11 @@ class mutex {
     pthread_mutex_t _mutex = nullptr;
 };
 
+// Alias unique_lock introduced since the C++ thread interface requires
+// to pass a mutex lock guard of type unique_lock<mutex> to be passed to
+// the wait() method of condition_variable
 template <typename mutex_type>
 using unique_lock = lock_guard<mutex_type>;
+
 }  // namespace std
 #endif  // MUTEX_H

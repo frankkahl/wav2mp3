@@ -1,6 +1,7 @@
 #include "signal_handler.h"
 #include "tiostream.h"
 #include "thread_includes.h"
+#include "return_code.h"
 
 #include <csignal>
 #include <sstream>
@@ -37,6 +38,8 @@ void SignalHandler::signal_handler(int sig_number) {
     }
     lock_guard guard(SignalHandler::_mutex);
     SignalHandler::_termination_requested = true;
+    set_return_code(RET_ABORTED_BY_SIGINT_OR_SIGTERM);
+
 }
 
 bool SignalHandler::_termination_requested = false;

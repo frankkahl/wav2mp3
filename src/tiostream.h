@@ -1,9 +1,12 @@
 #ifndef TIOSTREAM_H
 #define TIOSTREAM_H
 
+#include "thread_includes.h"
 #include <iostream>
 #include <string>
-#include "thread_includes.h"
+
+// wrapper class to make streams inherited from std::ostream
+// thread safe
 
 class tostream {
    public:
@@ -20,6 +23,7 @@ class tostream {
     std::ostream &_stream;
 };
 
+// declare thread safe instances encapsulating cout and cerr instatiated in tiostream.cpp
 extern tostream tcout;
 extern tostream tcerr;
 

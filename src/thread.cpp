@@ -1,6 +1,12 @@
 #include "thread.h"
 
+// the id of the thread creating an instance of "thread" is used as invalid thread id
+// since a successfully created thread always have an id differing from the that of the creating thead
 std::thread::thread() noexcept : _invalid_pthread(pthread_self()), _thread(pthread_self()) {}
+
+std::thread::thread(void *(*thread_function)(void *), void *arg_ptr) : _invalid_pthread(pthread_self()), _thread(pthread_self()) {
+    pthread_create(&_thread, nullptr, thread_function, arg_ptr);
+}
 
 void std::thread::join() { pthread_join(_thread, nullptr); }
 
@@ -13,7 +19,6 @@ std::thread::~thread() {
 #if defined(_WIN32)
 #include <windows.h>
 unsigned int std::thread::hardware_concurrency() {
-#define _WIN32_WINNT _WIN32_WINNT_WINXP
     SYSTEM_INFO info = {{0}};
     GetSystemInfo(&info);
     return info.dwNumberOfProcessors;
@@ -39,4 +44,4 @@ unsigned int std::thread::hardware_concurrency() {
 #endif
 }
 
-#endif // WINVER
+#endif  // WINVER

@@ -26,10 +26,10 @@ set(CPPFILES
   "${SOURCES}/thread_pool.cpp"
   "${SOURCES}/tiostream.cpp"
   "${SOURCES}/signal_handler.cpp"
+  "${SOURCES}/return_code.cpp"
   )
 
 set(HFILES
-  "${HEADERS}/wav2mp3.h"
   "${SOURCES}/argument_processing.h"
   "${SOURCES}/convert_wav_files.h"
   "${SOURCES}/riff_format.h"
@@ -41,6 +41,7 @@ set(HFILES
   "${SOURCES}/tiostream.h"
   "${SOURCES}/signal_handler.h"
   "${SOURCES}/thread_includes.h"
+  "${SOURCES}/return_code.h"
  )
 
 if(DEFINED USE_PTHREAD)

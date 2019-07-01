@@ -4,7 +4,7 @@
 // since a successfully created thread always have an id differing from the that of the creating thead
 std::thread::thread() noexcept : _invalid_pthread(pthread_self()), _thread(pthread_self()) {}
 
-std::thread::thread(void *(*thread_function)(void *), void *arg_ptr) : _invalid_pthread(pthread_self()), _thread(pthread_self()) {
+std::thread::thread(void *(*thread_function)(void *), void *arg_ptr) : _invalid_pthread(pthread_self()) {
     pthread_create(&_thread, nullptr, thread_function, arg_ptr);
 }
 

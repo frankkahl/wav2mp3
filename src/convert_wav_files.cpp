@@ -581,6 +581,7 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
                 ss << "\t (main) ERROR: \"" << filename.filename().string() << "\" is not a valid RIFF file: " << message << endl;
                 tcerr << ss.str();
             }
+            return;
         }
 
         // check if RIFF file is a valid WAV file with supported content
@@ -592,6 +593,7 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
             ss.str("");
             ss << "\t (main) \"" << filename.filename().string() << "\" is not a valid WAV file: " << message << endl;
             tcerr << ss.str();
+            return;
         }
 
         // create an output file (name chosen such that no existing file is overwritten)

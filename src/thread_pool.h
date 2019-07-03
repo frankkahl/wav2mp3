@@ -18,7 +18,7 @@
 
 class ThreadPool {
    public:
-    ThreadPool(const std::uint16_t num_of_threads = std::thread::hardware_concurrency());
+    ThreadPool(const std::uint16_t num_of_threads = pthread::thread::hardware_concurrency());
     ~ThreadPool();
 
     // enqueues a function pointer "function_to_execute" to be executed by the next available
@@ -32,7 +32,7 @@ class ThreadPool {
     // struct which stores the actual std::thread
     // and a queue for sending functions to it to be executed
     typedef struct Thread {
-        std::shared_ptr<std::thread> thread;
+        std::shared_ptr<pthread::thread> thread;
         ThreadQueue<std::function<void(const std::uint16_t)> > queue;
     } Thread;
 
@@ -71,10 +71,10 @@ class ThreadPool {
                                                     // thread number
     ThreadQueue<unsigned int> _idle_threads_queue;  // used by the threads to send their number
                                                     // to the main thread when they become idle
-    condition_variable _thread_args_copied;         // used to signal that the thread function has copied
+    pthread::condition_variable _thread_args_copied;         // used to signal that the thread function has copied
                                                     // the content of the passed ThreadArguments instance
                                                     // so that it can go out of scope
-    mutex _thread_args_copied_mutex;                // mutex to use in conjunction with _thread_args_copied
+    pthread::mutex _thread_args_copied_mutex;                // mutex to use in conjunction with _thread_args_copied
 };
 
 #endif  // THREADPOOL_H

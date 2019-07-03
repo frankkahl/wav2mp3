@@ -4,7 +4,7 @@
 #include "mutex.h"
 #include <pthread.h>
 
-namespace std {
+namespace pthread {
 // minimum functionality of the mutex class of the C++ 11 threading library
 // required for this application reimplemented using
 class condition_variable {

@@ -6,7 +6,7 @@
 
 class ThreadPool;
 
-namespace std {
+namespace pthread {
 // minimum functionality of the thread class of the C++ 11 threading library
 // required for this application
 // implemented using the pthreads libaray
@@ -31,5 +31,5 @@ class thread {
     pthread_t _invalid_pthread; 
     pthread_t _thread;
 };
-}  // namespace std
+}  // namespace pthread
 #endif  // THREAD_H

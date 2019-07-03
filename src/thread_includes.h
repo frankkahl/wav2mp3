@@ -9,6 +9,11 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+namespace pthread {
+  using mutex = std::mutex;
+  using condition_variable = std::condition_variable;
+  using thread = std::thread;
+}
 #endif
 
 #endif  // THREAD_INCLUDES_H

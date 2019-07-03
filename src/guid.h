@@ -47,4 +47,4 @@ extern bool operator>=(const Guid &a, const Guid &b);
 
 extern std::ostream &operator<<(std::ostream &out, const Guid &guid);
 
-#endif GUID_H
+#endif //GUID_H

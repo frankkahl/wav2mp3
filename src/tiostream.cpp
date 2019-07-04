@@ -1,6 +1,6 @@
 #include "tiostream.h"
 
-std::mutex tostream::_mutex;
+pthread::mutex tostream::_mutex;
 
 tostream::tostream(std::ostream &stream) : _stream(stream) {}
 

@@ -36,12 +36,6 @@ class ThreadPool {
         ThreadQueue<std::function<void(const std::uint16_t)> > queue;
     } Thread;
 
-    // struct for storing the arguments required by the thread function
-    typedef struct ThreadArguments {
-        ThreadPool *thread_pool;
-        std::uint16_t thread_number;
-    } ThreadArguments;
-
     // private methods
    private:
     // static thread function to execute in a worker thread.
@@ -50,7 +44,7 @@ class ThreadPool {
     // expected by the pthread_create function.
     // Since the thread functions needs a reference to the thread pool
     // and its thread number a pointer to a ThreadArguments struct is passed
-    static void *thread_function(void *arg_ptr);
+    static void *thread_function(ThreadPool *arg_ptr);
     // returns the next idle worker thread. Waits until one becomes idle if necessary
     // returns the number of the idle thread
     int get_next_idle_thread();
@@ -71,10 +65,14 @@ class ThreadPool {
                                                     // thread number
     ThreadQueue<unsigned int> _idle_threads_queue;  // used by the threads to send their number
                                                     // to the main thread when they become idle
-    pthread::condition_variable _thread_args_copied;         // used to signal that the thread function has copied
-                                                    // the content of the passed ThreadArguments instance
-                                                    // so that it can go out of scope
-    pthread::mutex _thread_args_copied_mutex;                // mutex to use in conjunction with _thread_args_copied
+
+    std::uint16_t _thread_number;  // number of currently started thread
+                                   // used during startup of all threads
+
+    pthread::condition_variable _thread_args_copied;  // used to signal that the thread function has copied
+                                                      // the content of _thread_arguments
+                                                      // so that it can be reused to start the next thread
+    pthread::mutex _thread_args_copied_mutex;         // mutex to use in conjunction with _thread_args_copied
 };
 
 #endif  // THREADPOOL_H

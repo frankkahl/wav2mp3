@@ -13,13 +13,13 @@ class tostream {
     tostream(std::ostream &stream);
     template <typename T>
     tostream &operator<<(const T &out) {
-        std::lock_guard<std::mutex> guard(_mutex);
+        pthread::lock_guard<pthread::mutex> guard(_mutex);
         _stream << out;
         return *this;
     }
 
    private:
-    static std::mutex _mutex;
+    static pthread::mutex _mutex;
     std::ostream &_stream;
 };
 

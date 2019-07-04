@@ -6,7 +6,7 @@
 #include <iostream>
 #include <sstream>
 
-ThreadPool::ThreadPool(const std::uint16_t num_of_threads) : _threads(num_of_threads) {
+ThreadPool::ThreadPool(const std::uint16_t num_of_threads) : _threads(num_of_threads), _thread_number(0) {
     if (num_of_threads < 1) {
         std::ostringstream ss;
         ss << "num_of_threads (" << num_of_threads << ") must not be smaller than 1";
@@ -22,10 +22,10 @@ ThreadPool::~ThreadPool() {
 };
 
 void ThreadPool::start_all_threads() {
-    unique_lock<mutex> lock_args_copied_mutex(_thread_args_copied_mutex);
+    pthread::unique_lock<pthread::mutex> lock_args_copied_mutex(_thread_args_copied_mutex);
     for (std::uint16_t i = 0; i < _threads.size(); ++i) {
-        ThreadArguments args = {this, i};
-        _threads[i].thread.reset(new pthread::thread(&ThreadPool::thread_function, &args));
+        _thread_number = i;
+        _threads[i].thread.reset(new pthread::thread((void *(*)(void *)) &ThreadPool::thread_function, this));
         _thread_args_copied.wait(lock_args_copied_mutex);
     }
 }
@@ -57,13 +57,16 @@ int ThreadPool::get_next_idle_thread() { return _idle_threads_queue.dequeue(); }
 
 void ThreadPool::notify_being_idle(const std::uint16_t thread_number) { _idle_threads_queue.enqueue(thread_number); }
 
-void *ThreadPool::thread_function(void *arg_ptr) {
+void *ThreadPool::thread_function(ThreadPool *tp) {
     // first copy the content of the passed ThreadArguments
-    ThreadArguments *thread_arguments = static_cast<ThreadArguments *>(arg_ptr);
-    uint16_t thread_number = thread_arguments->thread_number;
-    ThreadPool *tp = thread_arguments->thread_pool;
-    // then signals that the ThreadArguments instance *arg_ptr can now safely go out of scope
-    tp->_thread_args_copied.notify_one();
+    uint16_t thread_number = 0;
+    {
+        pthread::unique_lock<pthread::mutex> guard(tp->_thread_args_copied_mutex);
+        thread_number = tp->_thread_number;
+        tp->_thread_args_copied.notify_one(); // signals that the _thread_number member of the ThreadPool can now be reused to
+		                                      // start the next thread
+    }
+    
 
     // now get the queue for receiving commands
     auto &queue = tp->_threads[thread_number].queue;
@@ -90,3 +93,4 @@ void *ThreadPool::thread_function(void *arg_ptr) {
     }
     return nullptr;
 }
+

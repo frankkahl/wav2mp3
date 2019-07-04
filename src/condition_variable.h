@@ -15,7 +15,7 @@ class condition_variable {
     ~condition_variable();
 
     condition_variable& operator=(const condition_variable&) = delete;
-    void wait(std::unique_lock<std::mutex>& lock);
+    void wait(pthread::unique_lock<pthread::mutex>& lock);
     void lock();
     void unlock();
     void notify_one();

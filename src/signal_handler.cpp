@@ -18,7 +18,7 @@ SignalHandler::~SignalHandler() {
 }
 
 bool SignalHandler::termination_requested() {
-    lock_guard guard(SignalHandler::_mutex);
+    pthread::lock_guard<pthread::mutex> guard(SignalHandler::_mutex);
     return SignalHandler::_termination_requested;
 }
 
@@ -36,11 +36,11 @@ void SignalHandler::signal_handler(int sig_number) {
         default:
             return;
     }
-    lock_guard guard(SignalHandler::_mutex);
+    pthread::lock_guard<pthread::mutex> guard(SignalHandler::_mutex);
     SignalHandler::_termination_requested = true;
     set_return_code(RET_ABORTED_BY_SIGINT_OR_SIGTERM);
 
 }
 
 bool SignalHandler::_termination_requested = false;
-mutex SignalHandler::_mutex;
+pthread::mutex SignalHandler::_mutex;

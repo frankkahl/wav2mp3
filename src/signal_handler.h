@@ -21,7 +21,7 @@ class SignalHandler {
 
    private:
     static bool _termination_requested;
-    static std::mutex _mutex;
+    static pthread::mutex _mutex;
     static void signal_handler(int signal_code);
 };
 

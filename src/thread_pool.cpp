@@ -25,7 +25,7 @@ void ThreadPool::start_all_threads() {
     pthread::unique_lock<pthread::mutex> lock_args_copied_mutex(_thread_args_copied_mutex);
     for (std::uint16_t i = 0; i < _threads.size(); ++i) {
         _thread_number = i;
-        _threads[i].thread.reset(new pthread::thread(&ThreadPool::thread_function, this));
+        _threads[i].thread.reset(new pthread::thread(reinterpret_cast<void *(*)(void *)>(&ThreadPool::thread_function), this));
         _thread_args_copied.wait(lock_args_copied_mutex);
     }
 }

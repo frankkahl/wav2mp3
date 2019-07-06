@@ -2,7 +2,7 @@
 #define LAME_WRAPPER_H
 
 #include <string>
-#include "lame.h"
+#include <lame/lame.h>
 
 class LameInit {
    public:

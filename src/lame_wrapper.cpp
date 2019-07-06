@@ -4,7 +4,7 @@
 #include <functional>
 #include <memory>
 #include <sstream>
-#include "lame.h"
+#include <lame/lame.h>
 
 using namespace std;
 

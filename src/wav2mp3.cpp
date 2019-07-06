@@ -22,7 +22,7 @@ int main(int argc, const char* argv[]) {
                                 // the destruction restores the default handlers
     setlocale(LC_ALL, "");      // switch everything from the minimal "C" locale to the environments default locale to
                                 // ensure that all diacritical letters like Umlaute are displayed properly under Windows
-    auto& dir_iter = check_arguments(argc, argv);
+    auto dir_iter = check_arguments(argc, argv);
     if (dir_iter == fs::end(dir_iter)) {
         return RET_CODE_DIR_ITER_FAILED;
     }

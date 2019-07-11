@@ -1,18 +1,23 @@
 #include "thread.h"
+#include "check_pthread_error.h"
 
 // the id of the thread creating an instance of "thread" is used as invalid thread id
 // since a successfully created thread always have an id differing from the that of the creating thead
 pthread::thread::thread() noexcept : _invalid_pthread(pthread_self()), _thread(pthread_self()) {}
 
 pthread::thread::thread(void *(*thread_function)(void *), void *arg_ptr) : _invalid_pthread(pthread_self()) {
-    pthread_create(&_thread, nullptr, thread_function, arg_ptr);
+    int res = pthread_create(&_thread, nullptr, thread_function, arg_ptr);
+    check_pthread_error(res, "pthread_create");
 }
 
 void pthread::thread::join() { pthread_join(_thread, nullptr); }
 
 pthread::thread::~thread() {
     if (!pthread_equal(_thread, _invalid_pthread)) {
-        pthread_cancel(_thread);
+        int res = pthread_cancel(_thread);
+        if (res != ESRCH) {
+            check_pthread_error(res, "pthread_cancel");
+        }
     }
 }
 
@@ -26,18 +31,10 @@ unsigned int pthread::thread::hardware_concurrency() {
 
 #else
 
+#include <sys/sysinfo.h>
 // "stolen" from boost implementation
 unsigned int pthread::thread::hardware_concurrency() {
-#if defined(PTW32_VERSION) || defined(__hpux)
-    return pthread_num_processors_np();
-#elif defined(__APPLE__) || defined(__FreeBSD__)
-    int count;
-    size_t size = sizeof(count);
-    return sysctlbyname("hw.ncpu", &count, &size, NULL, 0) ? 0 : count;
-#elif defined(BOOST_HAS_UNISTD_H) && defined(_SC_NPROCESSORS_ONLN)
-    int const count = sysconf(_SC_NPROCESSORS_ONLN);
-    return (count > 0) ? count : 0;
-#elif defined(_GNU_SOURCE)
+#if defined(_GNU_SOURCE)
     return get_nprocs();
 #else
     return 0;

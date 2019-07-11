@@ -15,11 +15,11 @@
 #include "convert_wav_files.h"
 
 #include "lame_wrapper.h"
+#include "return_code.h"
 #include "riff_format.h"
 #include "signal_handler.h"
 #include "thread_pool.h"
 #include "tiostream.h"
-#include "return_code.h"
 
 #include <cstdint>
 #include <exception>
@@ -326,7 +326,6 @@ bool case_insensitive_compare(const string &a, const string &b) {
                       [](char a, char b) { return tolower(a) == tolower(b); });
 }
 
-
 /*!
  *  Creates the MP3 file and associates it with the passed stream "out_file".
  *  The path of the MP3 file is generated using the following rules:
@@ -421,128 +420,171 @@ static tuple<bool, string> open_output_stream(const fs::path &in_file_name, cons
     return make_tuple(true, status_line.str());
 }
 
-// this function does the actual conversion work and is being executed in one of the threads of the thread pool
-static tuple<bool, string> convert_file_worker(shared_ptr<ifstream> in, shared_ptr<ofstream> out, const fs::path out_filename,
-                                               const FormatHeaderExtensible header_extensible, const ChunkPosition pcm_data_position, string message,
-                                               uint16_t thread_number) {
-    string error;
-    const FormatHeader &header = header_extensible.header;
-    in->seekg(pcm_data_position.start, ios_base::beg);
-    // define lambda expression to avoid repetetive code for reporting
-    // errors
-    auto print_error = [&message, thread_number](const string &error) {
-        ostringstream ss;
-        ss << "\t (" << thread_number << ") " << message << "failed: " << endl;
-        ss << "\t\t " << error << endl;
-        tcerr << ss.str();
-        set_return_code(RET_CODE_CONVERTING_SOME_FILES_FAILED);
-    };
-    LameInit lame_guard;  // Initializes lame on construction and closes it on destruction
-                          // can be used as first argument of type lame_global_flags for all lame functions
-    if (!lame_guard.is_initialized()) {
-        error = "lame_init() failed";
-        print_error(error);
-        return make_tuple(false, error);
-    }
-    lame_set_num_channels(lame_guard, header.num_channels);
-    lame_set_in_samplerate(lame_guard, header.samples_per_second);
-    lame_set_mode(lame_guard, header.num_channels == 2 ? JOINT_STEREO : MONO);
-    lame_set_quality(lame_guard, 5); /* 2=high  5 = medium  7=low */
-    int ret_code = lame_init_params(lame_guard);
-    if (ret_code == -1) {
-        error = "lame_init_params() failed";
-        print_error(error);
-        set_return_code(RET_CODE_LAME_ERROR);
-        return make_tuple(false, error);
-    }
-    // allocate input buffer for 8192 samples with maximum allowed bit size
-    const uint32_t number_of_samples = 8192;
-    uint32_t pcm_buffer_size = number_of_samples * header.num_channels;
-    // then allocate the output buffer
-    // formula for the worst case size I found on the internet
-    uint32_t mp3_buffer_size = (uint32_t)(1.25 * (double)number_of_samples + 7200.0);
-    unique_ptr<unsigned char> mp3_buffer(new unsigned char[mp3_buffer_size]);
+void print_error(const string &message, uint16_t thread_number, const string &error) {
+    ostringstream ss;
+    ss << "\t (" << thread_number << ") " << message << "failed: " << endl;
+    ss << "\t\t " << error << endl;
+    tcerr << ss.str();
+    set_return_code(RET_CODE_CONVERTING_SOME_FILES_FAILED);
+};
 
+static bool config_lame(LameInit &lame_guard, const string &message, const FormatHeader &header, uint16_t thread_number) {
+    if (!lame_guard.is_initialized()) {
+        string error = "lame_init() failed";
+        print_error(message, thread_number, error);
+        return false;
+    }
+    int res = 0;
+    try {
+        res = lame_set_num_channels(lame_guard, header.num_channels);
+        LameInit::check_error(res, "lame_set_num_channels");
+        res = lame_set_in_samplerate(lame_guard, header.samples_per_second);
+        LameInit::check_error(res, "lame_set_in_samplerate");
+        res = lame_set_mode(lame_guard, header.num_channels == 2 ? JOINT_STEREO : MONO);
+        LameInit::check_error(res, "lame_set_mode");
+        res = lame_set_quality(lame_guard, 5); /* 2=high  5 = medium  7=low */
+        LameInit::check_error(res, "lame_set_quality");
+        res = lame_init_params(lame_guard);
+        LameInit::check_error(res, "lame_init_params");
+    } catch (const lame_exception &e) {
+        print_error(message, thread_number, e.what());
+        return false;
+    }
+    return true;
+}
+
+void convert_pcm_int_chunk(LameInit &lame_guard, std::shared_ptr<std::ifstream> &in, std::shared_ptr<std::ofstream> &out, const uint32_t number_of_samples,
+                           const uint32_t &bytes_per_sample, const FormatHeaderExtensible &header_extensible) {
     uint32_t valid_bits_per_sample;
+    auto const &header = header_extensible.header;
     if (header.audio_format == WAVE_FORMAT_EXTENSIBLE) {
         valid_bits_per_sample = header_extensible.samples.valid_bits_per_sample;
     } else {
         valid_bits_per_sample = header.bits_per_sample;
     }
-
-    uint32_t bytes_per_sample = (header.bits_per_sample + 7) / 8;
-    uint32_t residual_number_of_samples = (uint32_t)pcm_data_position.data_size / bytes_per_sample;
-    int bytes_converted;
-    while (residual_number_of_samples > 0) {
-        uint32_t read_data = residual_number_of_samples > pcm_buffer_size ? pcm_buffer_size : residual_number_of_samples;
-        if (header.audio_format == WAVE_FORMAT_PCM ||
-            (header.audio_format == WAVE_FORMAT_EXTENSIBLE && header_extensible.sub_format == KSDATAFORMAT_SUBTYPE_PCM)) {  // PCM
-            unique_ptr<int32_t> pcm_buffer(new int32_t[pcm_buffer_size]);
-            for (uint32_t i = 0; i < read_data; i++) {
-                int32_t c = 0;
-                in->read((char *)&c, bytes_per_sample);
-                if (bytes_per_sample == 1) {
-                    c -= 128;
-                }
-                c <<= (sizeof(int32_t) * 8 - valid_bits_per_sample);  // expands values to the full range of int32_t
-                pcm_buffer.get()[i] = c;
-            }
-            if (header.num_channels == 2) {
-                bytes_converted = lame_encode_buffer_interleaved_int(lame_guard, pcm_buffer.get(), read_data / 2, mp3_buffer.get(), mp3_buffer_size);
-            } else {
-                bytes_converted = lame_encode_buffer_int(lame_guard, pcm_buffer.get(), 0, read_data, mp3_buffer.get(), mp3_buffer_size);
-            }
-
-        } else if (header.audio_format == WAVE_FORMAT_IEEE_FLOAT ||
-                   (header.audio_format == WAVE_FORMAT_EXTENSIBLE && header_extensible.sub_format == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)) {  // IEEE_FLOAT
-            unique_ptr<double> pcm_buffer(new double[pcm_buffer_size]);
-            for (uint32_t i = 0; i < read_data; i++) {
-                double c = 0;
-                switch (bytes_per_sample) {
-                    case 4:
-                        float f;
-                        in->read((char *)&f, sizeof(float));
-                        c = f;  // convert float to double
-                        break;
-                    case 8:
-                        in->read((char *)&c, sizeof(double));
-                        break;
-                    default:
-                        ostringstream err;
-                        err << "unexpected error: illegal bits per sample value " << header.bits_per_sample << " for \"IEEE FLOAT\" format";
-                        print_error(err.str());
-                        return make_tuple(false, err.str());
-                }
-                pcm_buffer.get()[i] = c;
-            }
-            if (header.num_channels == 2) {
-                bytes_converted = lame_encode_buffer_interleaved_ieee_double(lame_guard, pcm_buffer.get(), read_data / 2, mp3_buffer.get(), mp3_buffer_size);
-            } else {
-                bytes_converted = lame_encode_buffer_ieee_double(lame_guard, pcm_buffer.get(), 0, read_data, mp3_buffer.get(), mp3_buffer_size);
-            }
-
-        } else {
-            error = "unexpected error: unsupported audio format. Should have been checked by check_sane_pcm_or_ieee_float_format_header()";
-            print_error(error);
-            return make_tuple(false, error);
+    unique_ptr<int32_t> pcm_buffer(new int32_t[number_of_samples]);
+    // formula found in the documentation of "lame_encode_buffer" in lame.h
+    uint32_t mp3_buffer_size = (uint32_t)(1.25 * (double)number_of_samples + 7200.0);
+    unique_ptr<unsigned char> mp3_buffer(new unsigned char[mp3_buffer_size]);
+    for (uint32_t i = 0; i < number_of_samples; i++) {
+        int32_t c = 0;
+        in->read((char *)&c, bytes_per_sample);
+        if (bytes_per_sample == 1) {
+            c -= 128;
         }
-        residual_number_of_samples -= read_data;
-        out->write((char *)mp3_buffer.get(), bytes_converted);
-        // check after each converted chunk if the user pressed Ctrl-C (SIGINT) or SIGTERM was sent
-        if (SignalHandler::termination_requested()) {
-            out->close();
-            std::error_code ec;
-            fs::remove(out_filename, ec);  // try to delete the incomplete MP3 file, but do not make a fuzz about failing
-            return make_tuple(false, error);
-        }
+        c <<= (sizeof(int32_t) * 8 - valid_bits_per_sample);  // expands values to the full range of int32_t
+        pcm_buffer.get()[i] = c;
     }
-    bytes_converted = lame_encode_flush(lame_guard, mp3_buffer.get(), mp3_buffer_size);
+    int bytes_converted = 0;
+    if (header.num_channels == 2) {
+        bytes_converted = lame_encode_buffer_interleaved_int(lame_guard, pcm_buffer.get(), number_of_samples / 2, mp3_buffer.get(), mp3_buffer_size);
+        LameInit::check_error(bytes_converted, "lame_encode_buffer_interleaved_int");
+    } else {
+        bytes_converted = lame_encode_buffer_int(lame_guard, pcm_buffer.get(), 0, number_of_samples, mp3_buffer.get(), mp3_buffer_size);
+        LameInit::check_error(bytes_converted, "lame_encode_buffer_int");
+    }
     out->write((char *)mp3_buffer.get(), bytes_converted);
+}
 
-    ostringstream ss;
-    ss << "\t (" << thread_number << ") " << message << " converted" << endl;
-    tcout << ss.str();
-    return make_tuple(true, string());
+void convert_ieee_float_chunk(LameInit &lame_guard, std::shared_ptr<std::ifstream> &in, std::shared_ptr<std::ofstream> &out, const uint32_t number_of_samples,
+                              const uint32_t &bytes_per_sample, const FormatHeader &header) {
+    unique_ptr<double> pcm_buffer(new double[number_of_samples]);
+    // formula found in the documentation of "lame_encode_buffer" in lame.h
+    uint32_t mp3_buffer_size = (uint32_t)(1.25 * (double)number_of_samples + 7200.0);
+    unique_ptr<unsigned char> mp3_buffer(new unsigned char[mp3_buffer_size]);
+    for (uint32_t i = 0; i < number_of_samples; i++) {
+        double c = 0;
+        switch (bytes_per_sample) {
+            case 4:
+                float f;
+                in->read((char *)&f, sizeof(float));
+                c = f;  // convert float to double
+                break;
+            case 8:
+                in->read((char *)&c, sizeof(double));
+                break;
+            default:
+                ostringstream err;
+                err << "unexpected error: illegal bits per sample value " << header.bits_per_sample << " for \"IEEE FLOAT\" format";
+                throw runtime_error(err.str());
+        }
+        pcm_buffer.get()[i] = c;
+    }
+    int bytes_converted = 0;
+    if (header.num_channels == 2) {
+        bytes_converted = lame_encode_buffer_interleaved_ieee_double(lame_guard, pcm_buffer.get(), number_of_samples / 2, mp3_buffer.get(), mp3_buffer_size);
+        LameInit::check_error(bytes_converted, "lame_encode_buffer_interleaved_ieee_double");
+    } else {
+        bytes_converted = lame_encode_buffer_ieee_double(lame_guard, pcm_buffer.get(), 0, number_of_samples, mp3_buffer.get(), mp3_buffer_size);
+        LameInit::check_error(bytes_converted, "lame_encode_buffer_ieee_double");
+    }
+    out->write((char *)mp3_buffer.get(), bytes_converted);
+}
+
+// this function does the actual conversion work and is being executed in one of the threads of the thread pool
+static void convert_file_worker(shared_ptr<ifstream> in, shared_ptr<ofstream> out, const fs::path out_filename, const FormatHeaderExtensible header_extensible,
+                                const ChunkPosition pcm_data_position, string message, uint16_t thread_number) {
+    // Define a lambda funciton for discard incomplete mp3 file in case of an error
+    auto remove_mp3_file = [&out, &out_filename]() {
+        out->close();
+        std::error_code ec;
+        fs::remove(out_filename, ec);  // try to delete the incomplete MP3 file, but do not make a fuzz about failing
+    };
+    // allocate input buffer for 8192 samples with maximum allowed bit size
+    const uint32_t max_number_of_frames_in_a_chunk = 8192;
+    try {
+        const FormatHeader &header = header_extensible.header;
+        LameInit lame_guard;  // Initializes lame on construction and closes it on destruction
+                              // can be used as first argument of type lame_global_flags for all lame functions
+        // configure lame according to the info in header
+        if (!config_lame(lame_guard, message, header, thread_number)) {
+            return;
+        }
+        // move to stream position where the data starts
+        in->seekg(pcm_data_position.start, ios_base::beg);
+
+        uint32_t max_number_of_samples_in_a_chunk = max_number_of_frames_in_a_chunk * header.num_channels;
+        uint32_t bytes_per_sample = (header.bits_per_sample + 7) / 8;
+        uint32_t residual_number_of_samples = (uint32_t)pcm_data_position.data_size / bytes_per_sample;
+
+        uint32_t number_of_samples = 0;
+        while (residual_number_of_samples > 0) {
+            number_of_samples = residual_number_of_samples > max_number_of_samples_in_a_chunk ? max_number_of_samples_in_a_chunk : residual_number_of_samples;
+            if (header.audio_format == WAVE_FORMAT_PCM ||
+                (header.audio_format == WAVE_FORMAT_EXTENSIBLE && header_extensible.sub_format == KSDATAFORMAT_SUBTYPE_PCM)) {  // PCM
+                convert_pcm_int_chunk(lame_guard, in, out, number_of_samples, bytes_per_sample, header_extensible);
+            } else if (header.audio_format == WAVE_FORMAT_IEEE_FLOAT ||
+                       (header.audio_format == WAVE_FORMAT_EXTENSIBLE && header_extensible.sub_format == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)) {  // IEEE_FLOAT
+                convert_ieee_float_chunk(lame_guard, in, out, number_of_samples, bytes_per_sample, header);
+
+            } else {
+                set_return_code(RET_CODE_CONVERTING_SOME_FILES_FAILED);
+                throw runtime_error("unexpected error: unsupported audio format. Should have been checked by check_sane_pcm_or_ieee_float_format_header()");
+            }
+            residual_number_of_samples -= number_of_samples;
+            // check after each converted chunk if the user pressed Ctrl-C (SIGINT) or SIGTERM was sent
+            if (SignalHandler::termination_requested()) {
+                remove_mp3_file();
+                return;
+            }
+        }
+        // formula found in the documentation of "lame_encode_buffer" in lame.h
+        uint32_t mp3_buffer_size = (uint32_t)(1.25 * (double)number_of_samples + 7200.0);
+        unique_ptr<unsigned char> mp3_buffer(new unsigned char[mp3_buffer_size]);
+        // now retrieve any lingering mp3 data into the mp3 buffer and write it
+        int bytes_converted = lame_encode_flush(lame_guard, mp3_buffer.get(), mp3_buffer_size);
+        out->write((char *)mp3_buffer.get(), bytes_converted);
+        // then report successful completion
+        ostringstream ss;
+        ss << "\t (" << thread_number << ") " << message << " converted" << endl;
+        tcout << ss.str();
+    } catch (const exception &e) {
+        print_error(message, thread_number, e.what());
+        remove_mp3_file();
+    } catch (...) {
+        print_error(message, thread_number, "unknown exception caught");
+        remove_mp3_file();
+    }
 }
 
 /*!
@@ -605,8 +647,7 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
         if (was_successful) {
             string error;
             using std::placeholders::_1;
-            function<tuple<bool, string>(const std::uint16_t)> fct =
-                bind(convert_file_worker, file, out_file, out_filename, format_header, pcm_data_position, message, _1);
+            function<void(const std::uint16_t)> fct = bind(convert_file_worker, file, out_file, out_filename, format_header, pcm_data_position, message, _1);
             // submit actual conversion function to thread pool
             thread_pool.enqueue(fct);
         } else {

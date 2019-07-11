@@ -19,7 +19,7 @@ set(CPPFILES
   "${SOURCES}/argument_processing.cpp"
   "${SOURCES}/convert_wav_files.cpp"
   "${SOURCES}/riff_format.cpp"
-  "${SOURCES}/lame_wrapper.cpp"
+  "${SOURCES}/lame_init.cpp"
   "${SOURCES}/guid.cpp"
   "${SOURCES}/thread_pool.cpp"
   "${SOURCES}/tiostream.cpp"
@@ -31,7 +31,7 @@ set(HFILES
   "${SOURCES}/argument_processing.h"
   "${SOURCES}/convert_wav_files.h"
   "${SOURCES}/riff_format.h"
-  "${SOURCES}/lame_wrapper.h"
+  "${SOURCES}/lame_init.h"
   "${SOURCES}/guid.h"
   "${SOURCES}/thread_pool.h"
   "${SOURCES}/thread_queue_impl.h"
@@ -72,6 +72,13 @@ include_directories("${HEADERS}")
 ## now define the target executable
 add_executable (wav2mp3 ${CPPFILES} ${HFILES})
 
+## set different target folder for the Release and the Debug target type so that
+## both can created simultaneously
+set(CMAKE_BINARY_DIR "${CMAKE_SOURCE_DIR}/build")
+set_target_properties(wav2mp3 PROPERTIES
+                        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/${CMAKE_BUILD_TYPE}")
+
+
 ## now do the platform specific configurations
 ## first configure for Windows
 if (CMAKE_HOST_WIN32)
@@ -98,11 +105,6 @@ if (CMAKE_HOST_WIN32)
 
 ## then check if compiling on a UNIX like system, e.g. linux
 elseif (CMAKE_HOST_UNIX)
-   ## set different target folder for the Release and the Debug target type so that
-   ## both can created simultaneously
-   set_target_properties(wav2mp3 PROPERTIES
-                         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/build/bin/${CMAKE_BUILD_TYPE}")
-
 			 
    ## on linux the C++ threading library oviously uses pthreads
    ## so search and add it for both flavors

@@ -1,4 +1,4 @@
-#include "lame_wrapper.h"
+#include "lame_init.h"
 #include "tiostream.h"
 #include "return_code.h"
 
@@ -12,31 +12,17 @@ using namespace std;
 
 void LameInit::lame_set_error_handler() {
     int res = 0;
-    res = lame_set_errorf(lgf, print_lame_output);
+    res = lame_set_errorf(lgf, discard_lame_output);
     check_error(res, "lame_set_errorf");
 
-    res = lame_set_debugf(lgf, print_lame_output);
+    res = lame_set_debugf(lgf, discard_lame_output);
     check_error(res, "lame_set_errorf");
 
-    res = lame_set_msgf(lgf, print_lame_output);
+    res = lame_set_msgf(lgf, discard_lame_output);
     check_error(res, "lame_set_errorf");
 }
 
-// void LameInit::discard_lame_output(const char *format, va_list ap) { return; }
-
-void LameInit::print_lame_output(const char *format, va_list ap) {
-    int string_size = snprintf(0, 0, format, ap);  // first calculate the size the error string
-                                                   // will have
-    char *error_string = new char[string_size];
-    ostringstream lame_error;
-
-    if (error_string) {
-        snprintf(error_string, string_size, format, ap);
-        lame_error << error_string << endl;
-        tcerr << lame_error.str();
-        delete[] error_string;
-    }
-}
+void LameInit::discard_lame_output(const char *format, va_list ap) { return; }
 
 LameInit::LameInit() : lgf(lame_init()) {
     if (lgf) {

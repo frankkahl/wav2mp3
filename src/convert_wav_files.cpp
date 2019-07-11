@@ -14,7 +14,7 @@
 
 #include "convert_wav_files.h"
 
-#include "lame_wrapper.h"
+#include "lame_init.h"
 #include "return_code.h"
 #include "riff_format.h"
 #include "signal_handler.h"
@@ -420,6 +420,8 @@ static tuple<bool, string> open_output_stream(const fs::path &in_file_name, cons
     return make_tuple(true, status_line.str());
 }
 
+// helper function for printing an error of format
+//       (<thread_number>) <message>: <error>
 void print_error(const string &message, uint16_t thread_number, const string &error) {
     ostringstream ss;
     ss << "\t (" << thread_number << ") " << message << "failed: " << endl;
@@ -428,6 +430,7 @@ void print_error(const string &message, uint16_t thread_number, const string &er
     set_return_code(RET_CODE_CONVERTING_SOME_FILES_FAILED);
 };
 
+// calls the config functions of lame according to the content of the header
 static bool config_lame(LameInit &lame_guard, const string &message, const FormatHeader &header, uint16_t thread_number) {
     if (!lame_guard.is_initialized()) {
         string error = "lame_init() failed";
@@ -453,8 +456,9 @@ static bool config_lame(LameInit &lame_guard, const string &message, const Forma
     return true;
 }
 
+// helper function for convert_file_worker() for converting the next num_of_samples  audio samples of a WAV file in PCM format
 void convert_pcm_int_chunk(LameInit &lame_guard, std::shared_ptr<std::ifstream> &in, std::shared_ptr<std::ofstream> &out, const uint32_t number_of_samples,
-                           const uint32_t &bytes_per_sample, const FormatHeaderExtensible &header_extensible) {
+                           const uint32_t bytes_per_sample, const FormatHeaderExtensible &header_extensible) {
     uint32_t valid_bits_per_sample;
     auto const &header = header_extensible.header;
     if (header.audio_format == WAVE_FORMAT_EXTENSIBLE) {
@@ -486,8 +490,9 @@ void convert_pcm_int_chunk(LameInit &lame_guard, std::shared_ptr<std::ifstream> 
     out->write((char *)mp3_buffer.get(), bytes_converted);
 }
 
+// helper function for convert_file_worker() for converting the next num_of_samples  audio samples of a WAV file in IEEE FLOAT format
 void convert_ieee_float_chunk(LameInit &lame_guard, std::shared_ptr<std::ifstream> &in, std::shared_ptr<std::ofstream> &out, const uint32_t number_of_samples,
-                              const uint32_t &bytes_per_sample, const FormatHeader &header) {
+                              const uint32_t bytes_per_sample, const FormatHeader &header) {
     unique_ptr<double> pcm_buffer(new double[number_of_samples]);
     // formula found in the documentation of "lame_encode_buffer" in lame.h
     uint32_t mp3_buffer_size = (uint32_t)(1.25 * (double)number_of_samples + 7200.0);
@@ -571,9 +576,11 @@ static void convert_file_worker(shared_ptr<ifstream> in, shared_ptr<ofstream> ou
         // formula found in the documentation of "lame_encode_buffer" in lame.h
         uint32_t mp3_buffer_size = (uint32_t)(1.25 * (double)number_of_samples + 7200.0);
         unique_ptr<unsigned char> mp3_buffer(new unsigned char[mp3_buffer_size]);
+
         // now retrieve any lingering mp3 data into the mp3 buffer and write it
         int bytes_converted = lame_encode_flush(lame_guard, mp3_buffer.get(), mp3_buffer_size);
         out->write((char *)mp3_buffer.get(), bytes_converted);
+
         // then report successful completion
         ostringstream ss;
         ss << "\t (" << thread_number << ") " << message << " converted" << endl;

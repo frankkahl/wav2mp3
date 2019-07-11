@@ -2,6 +2,7 @@
 #define MUTEX_H
 
 #include <pthread.h>
+#include <string>
 
 namespace pthread {
 // minimum functionality of the mutex class of the C++ 11 threading library
@@ -35,7 +36,7 @@ class mutex {
     void unlock();
 
    private:
-    pthread_mutex_t _mutex = 0;
+    pthread_mutex_t _mutex;
 };
 
 // Alias unique_lock introduced since the C++ thread interface requires

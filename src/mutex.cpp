@@ -1,12 +1,28 @@
 #include "mutex.h"
+#include "check_pthread_error.h"
+#include "return_code.h"
+#include <sstream>
 #include <pthread.h>
+#include <iostream>
 
-pthread::mutex::mutex() noexcept { pthread_mutex_init(&_mutex, NULL); }
+using namespace std;
+
+pthread::mutex::mutex() noexcept {
+    int res = pthread_mutex_init(&_mutex, NULL);
+    check_pthread_error(res, "pthread_mutex_init");
+}
 pthread::mutex::~mutex() {
     unlock();
-    pthread_mutex_destroy(&_mutex);
+    int res = pthread_mutex_destroy(&_mutex);
+    check_pthread_error(res, "pthread_mutex_destroy");
 }
 
-void pthread::mutex::lock() { pthread_mutex_lock(&_mutex); }
+void pthread::mutex::lock() {
+    int res = pthread_mutex_lock(&_mutex);
+    check_pthread_error(res, "pthread_mutex_lock");
+}
 
-void pthread::mutex::unlock() { pthread_mutex_unlock(&_mutex); }
+void pthread::mutex::unlock() {
+    int res = pthread_mutex_unlock(&_mutex);
+    check_pthread_error(res, "pthread_mutex_unlock");
+}

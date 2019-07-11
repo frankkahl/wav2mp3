@@ -21,7 +21,7 @@ class condition_variable {
     void notify_one();
 
    private:
-    pthread_cond_t _cond_var = nullptr;
+  pthread_cond_t _cond_var;
 };
 }
 

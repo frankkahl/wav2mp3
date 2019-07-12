@@ -6,7 +6,7 @@ del /F /S /Q  CMakeFiles
 del /F CMakeCache.txt
 
 echo "--- Building release version ; using pthreads ---"
-cmake  -G "Visual Studio 15 2017 Win64" -DUSE_CPP11_THREADS= CMakeLists.txt
+cmake  -G "Visual Studio 15 2017 Win64" CMakeLists.txt
 devenv wav2mp3.sln /Rebuild Release
 devenv wav2mp3.sln /Rebuild Debug
 popd

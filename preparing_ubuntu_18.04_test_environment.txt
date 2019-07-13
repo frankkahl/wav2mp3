@@ -1,0 +1,33 @@
+- install all Ubuntu 18.04 Updates
+  with "Software Updater"
+- installing
+    * cmake 3.14.5
+    * gcc/g++ 9.1 (supports C++ 17)
+    * lame 3.100.2
+    * audacious (for testing MP3 files created with wav2mp3)
+  using the following commands:
+
+     # git 3.14.5 as snap package										       
+     sudo apt-get update											       
+     sudo apt-get install git										       
+     sudo snap  install cmake --classic									       
+     													       
+     # gcc/g++ 9.1												       
+     sudo add-apt-repository ppa:ubuntu-toolchain-r/test							       
+     sudo apt-get install gcc-9 g++-9									       
+     sudo apt install software-properties-common								       
+     sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 60 --slave /usr/bin/g++ g++ /usr/bin/g++-9  
+     													       
+     # lame 3.100.2												       
+     sudo apt-get install libmp3lame-dev									       
+     sudo apt-get install libmp3lame0									       
+     													       
+     # audacious												       
+     sudo apt-get install audacious audacious-plugins							       
+     													       
+     # checking out wav2mp3 repository from GitHub								       
+     git clone "https://github.com/frankkahl/wav2mp3.git" wav2mp3						       
+     													       
+     # compiling												       
+     cd wav2mp3												       
+     ./build_wav2mp3.sh                                                                                             

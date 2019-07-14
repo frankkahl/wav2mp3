@@ -1,8 +1,6 @@
 #ifndef RETURN_CODE_H
 #define RETURN_CODE_H
 
-#include <stdexcept>
-
 // known return codes
 // they larger the numerical value of the return code is
 // the more severe the error is

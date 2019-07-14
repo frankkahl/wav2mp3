@@ -37,6 +37,7 @@ class mutex {
 
    private:
     pthread_mutex_t _mutex;
+  bool _is_locked;
 };
 
 // Alias unique_lock introduced since the C++ thread interface requires

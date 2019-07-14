@@ -654,7 +654,8 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
         if (was_successful) {
             string error;
             using std::placeholders::_1;
-            function<void(const std::uint16_t)> fct = bind(convert_file_worker, file, out_file, out_filename, format_header, pcm_data_position, message, _1);
+            function<void(const std::uint16_t)> fct = bind(convert_file_worker, file, out_file, out_filename,
+							   format_header, pcm_data_position, message, _1);
             // submit actual conversion function to thread pool
             thread_pool.enqueue(fct);
         } else {

@@ -2,7 +2,8 @@
 
 command line tool for converting all WAV audio files in a folder
 and all its sub-folders into MP3. All files of a supported format are converted,
-regardless of their file extension. Currently a fixed lame quality setting of 5 is used
+regardless of their file extension. Currently a fixed lame quality setting
+of 5 is used.
 
 1. Description
    - command line tool
@@ -11,8 +12,8 @@ regardless of their file extension. Currently a fixed lame quality setting of 5 
    - root folder is passed as first argument.
    - a WAV file of name "<name>.wav" is converted into an MP3 with the file name
      "<name>.mp3". If such a file already exists the resulting MP3 has the name
-     "<name> (n).mp3" where n is the first index for which not already an MP3 file exists.
-     An existing MP3 file is never overwritten.
+     "<name> (n).mp3" where n is the first index for which not already
+     an MP3 file exists. An existing MP3 file is never overwritten.
    - uses the lame 3.100 library for MP3 encoding
    - uses as many threads as cores are available
    - can be interrupted by pressing Ctrl-C
@@ -35,13 +36,12 @@ regardless of their file extension. Currently a fixed lame quality setting of 5 
    - requires CMake 3.14 for building (must be in search path)
    - can be configured to use either
      - pthreads (POSIX 1003.1-2001) or
-     - C++ native threading library (C++ 11 or newer)
+     - C++ native threading library (since C++ 11)
    - Windows:
      - links statically against LAME 3.10 (see http://lame.sourceforge.net/)
        and - if used - pthreads (POSIX 1003.1-2001)
-     - precompiled static libraries of LAME and pthreads
-       are included
-     - compiling:
+     - precompiled static libraries of LAME and pthreads are included
+     - build by executing:
        - build_wav2mp3.bat (pthreads version) or
        - build_wav2mp3_using_C++_threads.bat (C++ native threads)
           
@@ -50,8 +50,12 @@ regardless of their file extension. Currently a fixed lame quality setting of 5 
      - requires pthreads - if used - and lame development packages
        (see more below)
      - compiling:
-       - build_wav2mp3.sh (pthreads version) or
-       - build_wav2mp3_using_C++_threads.sh (C++ native threads)
+       - install required packages and checkout repository
+         following instructions in file:
+            preparing_ubuntu_18.04_test_environment.txt
+       - build by executing
+          * build_wav2mp3.sh (pthreads version) or
+          * build_wav2mp3_using_C++_threads.sh (C++ native threads)
 
 3. Precompiled binaries:
    - Windows: bin/windows/release/wav2mp3.exe
@@ -62,8 +66,8 @@ regardless of their file extension. Currently a fixed lame quality setting of 5 
      - recursive/non-recursive directory processing
      - overwriting already existing MP3 files
      - setting lame encoding quality
-   - Transferring possible meta information (e.g. Author, Album etc.)
-     present in the WAV file to ID3 Tags
+   - Transferring all meta informations found (e.g. Author, Album etc.)
+     found in the WAV file to ID3 Tags
 
 5. Licenses:
    - see file "LICENSE"

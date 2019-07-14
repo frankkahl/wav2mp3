@@ -12,7 +12,6 @@ pthread::mutex::mutex() noexcept {
     check_pthread_error(res, "pthread_mutex_init");
 }
 pthread::mutex::~mutex() {
-    unlock();
     int res = pthread_mutex_destroy(&_mutex);
     check_pthread_error(res, "pthread_mutex_destroy");
 }

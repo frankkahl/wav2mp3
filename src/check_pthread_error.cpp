@@ -1,4 +1,3 @@
-#define __STDC_WANT_LIB_EXT1__ 1
 #include "check_pthread_error.h"
 #include "return_code.h"
 #include <cstring>
@@ -18,10 +17,12 @@ void check_pthread_error(int errnum, const string pthread_function_name) {
     if (errnum) {
         ostringstream ss;
         char errmsg[MAX_ERROR_STRING_LENGTH + 1];
-
-        strerror_r(errnum, errmsg, MAX_ERROR_STRING_LENGTH);
+	// it turns out that under Ubuntu Linux using g++ 9.1
+	// the GNU version of strerror_r is used by default
+	// which returns a pointer to the error string
+        char *msg = strerror_r(errnum, errmsg, MAX_ERROR_STRING_LENGTH);
         ss << "Pthread function \"" << pthread_function_name;
-        ss << "\" failed with error: " << string(errmsg) << " (" << errnum << ")" << endl;
+        ss << "\" failed with error: " << string(msg) << " (" << errnum << ")" << endl;
         cout << ss.str();
         exit(RET_CODE_PTHREAD_ERROR);
     }

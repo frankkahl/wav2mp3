@@ -15,29 +15,33 @@ template <typename mutex_type>
 class lock_guard {
     friend condition_variable;
 
-   public:
-    lock_guard(mutex_type& mutex) : _mutex(mutex) { _mutex.lock(); }
-    ~lock_guard() { _mutex.unlock(); }
+  public:
+    lock_guard(mutex_type& mutex)
+        : _mutex(mutex) {
+        _mutex.lock();
+    }
+    ~lock_guard() {
+        _mutex.unlock();
+    }
 
-   private:
+  private:
     mutex_type& _mutex;
 };
 
 class mutex {
     friend condition_variable;
 
-   public:
+  public:
     mutex() noexcept;
     ~mutex();
 
     mutex(const mutex&) = delete;
     mutex& operator=(const mutex&) = delete;
-    void lock();
-    void unlock();
+    void   lock();
+    void   unlock();
 
-   private:
+  private:
     pthread_mutex_t _mutex;
-  bool _is_locked;
 };
 
 // Alias unique_lock introduced since the C++ thread interface requires

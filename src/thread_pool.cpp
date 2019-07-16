@@ -8,26 +8,27 @@
 
 using namespace std;
 
-ThreadPool::ThreadPool(const uint16_t num_of_threads) : _threads(num_of_threads), _thread_number(0) {
+ThreadPool::ThreadPool(const uint16_t num_of_threads)
+    : _threads(num_of_threads)
+    , _thread_number(0) {
     if (num_of_threads < 1) {
         ostringstream ss;
         ss << "num_of_threads (" << num_of_threads << ") must not be smaller than 1";
         throw invalid_argument(ss.str());
     }
     start_all_threads();
-    cout << "Thread pool started with " << num_of_threads << " threads." << endl;
 };
 
 ThreadPool::~ThreadPool() {
     stop_all_threads();
-    cout << "Thread pool stopped." << endl;
 };
 
 void ThreadPool::start_all_threads() {
     pthread::unique_lock<pthread::mutex> lock_args_copied_mutex(_thread_args_copied_mutex);
     for (uint16_t i = 0; i < _threads.size(); ++i) {
         _thread_number = i;
-        _threads[i].thread.reset(new pthread::thread(reinterpret_cast<void *(*)(void *)>(&ThreadPool::thread_function), this));
+        _threads[i].thread.reset(
+            new pthread::thread(reinterpret_cast<void *(*)(void *)>(&ThreadPool::thread_function), this));
         _thread_args_copied.wait(lock_args_copied_mutex);
     }
 }
@@ -55,9 +56,13 @@ void ThreadPool::enqueue(function<void(const uint16_t)> function_to_execute) {
     // returns a future to the promise the caller
 }
 
-int ThreadPool::get_next_idle_thread() { return _idle_threads_queue.dequeue(); }
+int ThreadPool::get_next_idle_thread() {
+    return _idle_threads_queue.dequeue();
+}
 
-void ThreadPool::notify_being_idle(const uint16_t thread_number) { _idle_threads_queue.enqueue(thread_number); }
+void ThreadPool::notify_being_idle(const uint16_t thread_number) {
+    _idle_threads_queue.enqueue(thread_number);
+}
 
 void *ThreadPool::thread_function(ThreadPool *tp) {
     // first copy the content of the passed ThreadArguments
@@ -65,10 +70,9 @@ void *ThreadPool::thread_function(ThreadPool *tp) {
     {
         pthread::unique_lock<pthread::mutex> guard(tp->_thread_args_copied_mutex);
         thread_number = tp->_thread_number;
-        tp->_thread_args_copied.notify_one(); // signals that the _thread_number member of the ThreadPool can now be reused to
-		                                      // start the next thread
+        tp->_thread_args_copied.notify_one();  // signals that the _thread_number member of the ThreadPool can now be
+                                               // reused to start the next thread
     }
-    
 
     // now get the queue for receiving commands
     auto &queue = tp->_threads[thread_number].queue;
@@ -95,4 +99,3 @@ void *ThreadPool::thread_function(ThreadPool *tp) {
     }
     return nullptr;
 }
-

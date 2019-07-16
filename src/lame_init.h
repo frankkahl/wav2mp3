@@ -2,21 +2,25 @@
 #define LAME_INIT_H
 
 #include <lame/lame.h>
-#include <string>
 #include <map>
 #include <stdexcept>
+#include <string>
 
 // exception thrown by LameInit::check_error(...)
 class lame_exception : public std::runtime_error {
-   public:
-    lame_exception(const std::string &message) : std::runtime_error(message) {}
-    lame_exception(const char *message) : std::runtime_error(message) {}
+  public:
+    lame_exception(const std::string &message)
+        : std::runtime_error(message) {
+    }
+    lame_exception(const char *message)
+        : std::runtime_error(message) {
+    }
 };
 
 // RAII style resource manager for lame library
 
 class LameInit {
-   public:
+  public:
     LameInit();
     ~LameInit();
     bool is_initialized() const;
@@ -32,13 +36,13 @@ class LameInit {
     static std::map<int, std::string> lame_error_map;
 
     // private methods
-   private:
+  private:
     // registers discard_lame_output static function as lame error/message output
     // function
-    void lame_set_error_handler();
+    void        lame_set_error_handler();
     static void discard_lame_output(const char *format, va_list ap);
 
-   private:  // private members
+  private:  // private members
     lame_global_flags *lgf;
 };
 

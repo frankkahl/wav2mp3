@@ -11,12 +11,12 @@
 // https://en.wikipedia.org/wiki/Universally_unique_identifier
 typedef struct Guid {
     // data fields
-    uint32_t time_low = 0;
-    uint16_t time_mid = 0;
+    uint32_t time_low            = 0;
+    uint16_t time_mid            = 0;
     uint16_t time_hi_and_version = 0;
-    uint8_t clock_seq_low = 0;
-    uint8_t clock_seq_hi = 0;
-    uint8_t node[6] = {0};
+    uint8_t  clock_seq_low       = 0;
+    uint8_t  clock_seq_hi        = 0;
+    uint8_t  node[6]             = {0};
     // methods
     // constructs GUID from the passed std::string guid_string
     // guid_string must be in the human readable format
@@ -35,7 +35,7 @@ typedef struct Guid {
 
     // some static data shared between all instances
     static std::regex guid_regexp;
-    static Guid empty;
+    static Guid       empty;
 } Guid;
 
 extern bool operator==(const Guid &a, const Guid &b);
@@ -47,4 +47,4 @@ extern bool operator>=(const Guid &a, const Guid &b);
 
 extern std::ostream &operator<<(std::ostream &out, const Guid &guid);
 
-#endif //GUID_H
+#endif  // GUID_H

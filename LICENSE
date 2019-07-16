@@ -20,19 +20,25 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+On all supported platforms this software uses the header-only library:
+** cxxopts:
+   - MIT License
+   - source code: https://github.com/jarro2783/cxxopts
+   - LICENSE and README files: "cxxopts" directory
 
 On Windows this software uses the following third party libraries
 with static linkage:
 
-1. lame 3.10:
+** lame 3.10:
    - LGPL v2 license
    - source code: http://lame.sourceforge.net/
    - LICENSE and README files: "lame-3.100" directory
 
-2. pthread:
+** pthread:
    - PTHREADS4W (a.k.a. PTHREADS-WIN32)
      (Open Source Software implementation of the Threads
      component of the POSIX 1003.1c 1995 Standard)
    - Apache License 2.0
    - source code: https://sourceforge.net/projects/pthreads4w/
    - LICENSE and README files: "pthreads" directory
+

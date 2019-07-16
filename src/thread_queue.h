@@ -10,15 +10,15 @@
 
 template <typename T>
 class ThreadQueue {
-   public:
+  public:
     // pushed the instance "element" of type T into the queue
     void enqueue(T element);
     // waits until at least one elemnt is in the queue and
     T dequeue();
 
-   private:
-    std::queue<T> _queue;
-    pthread::mutex _mutex;
+  private:
+    std::queue<T>               _queue;
+    pthread::mutex              _mutex;
     pthread::condition_variable _cond_var;
 };
 

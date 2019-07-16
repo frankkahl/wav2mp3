@@ -17,8 +17,8 @@
 // and is ready to immediately process the function
 
 class ThreadPool {
-   public:
-    ThreadPool(const std::uint16_t num_of_threads = pthread::thread::hardware_concurrency());
+  public:
+    ThreadPool(const std::uint16_t num_of_threads);
     ~ThreadPool();
 
     // enqueues a function pointer "function_to_execute" to be executed by the next available
@@ -28,16 +28,16 @@ class ThreadPool {
     void enqueue(std::function<void(const std::uint16_t)> function_to_execute);
 
     // private typedefs
-   private:
+  private:
     // struct which stores the actual std::thread
     // and a queue for sending functions to it to be executed
     typedef struct Thread {
-        std::shared_ptr<pthread::thread> thread;
+        std::shared_ptr<pthread::thread>                       thread;
         ThreadQueue<std::function<void(const std::uint16_t)> > queue;
     } Thread;
 
     // private methods
-   private:
+  private:
     // static thread function to execute in a worker thread.
     // Here a static function of this particular signature is used
     // since it is compatible with the signature of the function
@@ -59,7 +59,7 @@ class ThreadPool {
     void stop_all_threads();
 
     // private data
-   private:
+  private:
     std::vector<Thread> _threads;                   // stores Thread instance for each worker thread
                                                     // the index of the vector is used as the
                                                     // thread number

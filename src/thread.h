@@ -12,7 +12,7 @@ namespace pthread {
 // implemented using the pthreads libaray
 
 class thread {
-   public:
+  public:
     thread() noexcept;
     thread(const thread &) = delete;
     // here only the constructor signature required by the the pthread_create function is implemented,
@@ -27,8 +27,8 @@ class thread {
     // Not sure if virtual cores due  to hyperthreading counts as well
     static unsigned int hardware_concurrency();
 
-   private:
-    pthread_t _invalid_pthread; 
+  private:
+    pthread_t _invalid_pthread;
     pthread_t _thread;
 };
 }  // namespace pthread

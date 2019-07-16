@@ -15,14 +15,14 @@
 // forward declaration of map with description strings for audio format codes
 // defined in "riff_format.cpp"
 extern std::map<uint16_t, std::string> audio_format_uint16_to_names;
-//extern std::map<std::string, uint16_t> audio_format_names_to_uint16;
+// extern std::map<std::string, uint16_t> audio_format_names_to_uint16;
 extern std::map<Guid, std::string> audio_format_guid_to_names;
-//extern std::map<std::string, Guid> audio_format_names_to_guid;
+// extern std::map<std::string, Guid> audio_format_names_to_guid;
 
 // RIFF header
 
 typedef struct RiffHeader {
-    char riff_id[4];           // RIFF FOURCC identifier, must contains "RIFF"
+    char     riff_id[4];       // RIFF FOURCC identifier, must contains "RIFF"
     uint32_t total_data_size;  // size of all valid data following this entry in file
                                // usually this is file size - 8, but that is not guaranteed
     char format[4];            // should contain "WAVE" in case of a WAV file
@@ -45,7 +45,7 @@ typedef struct FormatHeader {
 } FormatHeader;
 
 typedef struct FormatHeaderExtensible {
-    FormatHeader header;
+    FormatHeader  header;
     std::uint16_t size;  // Size, in bytes, of extra format information appended to the end of
                          // this structure. This information can be used by non-PCM formats
                          // to store extra attributes for the audio_format field
@@ -56,8 +56,8 @@ typedef struct FormatHeaderExtensible {
         uint16_t samples_per_block;
         uint16_t reserved;
     } samples;
-    uint32_t channel_mask;
-    Guid sub_format;
+    uint32_t channel_mask = 0;
+    Guid     sub_format;
 
 } FormatHeaderExtensible;
 
@@ -168,8 +168,10 @@ typedef struct FormatHeaderExtensible {
 #define WAVE_FORMAT_RACAL_RECORDER_G723_1 0x00A3      /* Racal recorders */
 #define WAVE_FORMAT_RACAL_RECORDER_TETRA_ACELP 0x00A4 /* Racal recorders */
 #define WAVE_FORMAT_NEC_AAC 0x00B0                    /* NEC Corp. */
-#define WAVE_FORMAT_RAW_AAC1                                                                                                       \
-    0x00FF /* For Raw AAC, with format block AudioSpecificConfig() (as defined by MPEG-4), that follows WAVEFORMATEX \ \ \ \ \ \ \ \
+#define WAVE_FORMAT_RAW_AAC1                                                                                           \
+    0x00FF /* For Raw AAC, with format block AudioSpecificConfig() (as defined by MPEG-4), that follows WAVEFORMATEX \ \
+            * \                                                                                                        \
+            * \ \ \ \ \ \ \ \                                                                                                                     \
             */
 #define WAVE_FORMAT_RHETOREX_ADPCM 0x0100            /* Rhetorex Inc. */
 #define WAVE_FORMAT_IRAT 0x0101                      /* BeCubed Software Inc. */
@@ -256,22 +258,22 @@ typedef struct FormatHeaderExtensible {
 #define WAVE_FORMAT_SOUNDSPACE_MUSICOMPRESS 0x1500    /* AT&T Labs, Inc. */
 #define WAVE_FORMAT_MPEG_ADTS_AAC 0x1600              /* Microsoft Corporation */
 #define WAVE_FORMAT_MPEG_RAW_AAC 0x1601               /* Microsoft Corporation */
-#define WAVE_FORMAT_MPEG_LOAS 0x1602                  /* Microsoft Corporation (MPEG-4 Audio Transport Streams (LOAS/LATM) */
-#define WAVE_FORMAT_NOKIA_MPEG_ADTS_AAC 0x1608        /* Microsoft Corporation */
-#define WAVE_FORMAT_NOKIA_MPEG_RAW_AAC 0x1609         /* Microsoft Corporation */
-#define WAVE_FORMAT_VODAFONE_MPEG_ADTS_AAC 0x160A     /* Microsoft Corporation */
-#define WAVE_FORMAT_VODAFONE_MPEG_RAW_AAC 0x160B      /* Microsoft Corporation */
-#define WAVE_FORMAT_MPEG_HEAAC 0x1610                 /* Microsoft Corporation (MPEG-2 AAC or MPEG-4 HE-AAC v1/v2 */
-                                                      /* streams with any payload (ADTS, ADIF, LOAS/LATM, RAW). */
-                                                      /* Format block includes MP4 AudioSpecificConfig() -- see HEAACWAVEFORMAT below */
-#define WAVE_FORMAT_VOXWARE_RT24_SPEECH 0x181C        /* Voxware Inc. */
-#define WAVE_FORMAT_SONICFOUNDRY_LOSSLESS 0x1971      /* Sonic Foundry */
-#define WAVE_FORMAT_INNINGS_TELECOM_ADPCM 0x1979      /* Innings Telecom Inc. */
-#define WAVE_FORMAT_LUCENT_SX8300P 0x1C07             /* Lucent Technologies */
-#define WAVE_FORMAT_LUCENT_SX5363S 0x1C0C             /* Lucent Technologies */
-#define WAVE_FORMAT_CUSEEME 0x1F03                    /* CUSeeMe */
-#define WAVE_FORMAT_NTCSOFT_ALF2CM_ACM 0x1FC4         /* NTCSoft */
-#define WAVE_FORMAT_DVM 0x2000                        /* FAST Multimedia AG */
+#define WAVE_FORMAT_MPEG_LOAS 0x1602           /* Microsoft Corporation (MPEG-4 Audio Transport Streams (LOAS/LATM) */
+#define WAVE_FORMAT_NOKIA_MPEG_ADTS_AAC 0x1608 /* Microsoft Corporation */
+#define WAVE_FORMAT_NOKIA_MPEG_RAW_AAC 0x1609  /* Microsoft Corporation */
+#define WAVE_FORMAT_VODAFONE_MPEG_ADTS_AAC 0x160A /* Microsoft Corporation */
+#define WAVE_FORMAT_VODAFONE_MPEG_RAW_AAC 0x160B  /* Microsoft Corporation */
+#define WAVE_FORMAT_MPEG_HEAAC 0x1610             /* Microsoft Corporation (MPEG-2 AAC or MPEG-4 HE-AAC v1/v2 */
+                                                  /* streams with any payload (ADTS, ADIF, LOAS/LATM, RAW). */
+/* Format block includes MP4 AudioSpecificConfig() -- see HEAACWAVEFORMAT below */
+#define WAVE_FORMAT_VOXWARE_RT24_SPEECH 0x181C   /* Voxware Inc. */
+#define WAVE_FORMAT_SONICFOUNDRY_LOSSLESS 0x1971 /* Sonic Foundry */
+#define WAVE_FORMAT_INNINGS_TELECOM_ADPCM 0x1979 /* Innings Telecom Inc. */
+#define WAVE_FORMAT_LUCENT_SX8300P 0x1C07        /* Lucent Technologies */
+#define WAVE_FORMAT_LUCENT_SX5363S 0x1C0C        /* Lucent Technologies */
+#define WAVE_FORMAT_CUSEEME 0x1F03               /* CUSeeMe */
+#define WAVE_FORMAT_NTCSOFT_ALF2CM_ACM 0x1FC4    /* NTCSoft */
+#define WAVE_FORMAT_DVM 0x2000                   /* FAST Multimedia AG */
 #define WAVE_FORMAT_DTS2 0x2001
 #define WAVE_FORMAT_MAKEAVIS 0x3313
 #define WAVE_FORMAT_DIVIO_MPEG4_AAC 0x4143          /* Divio, Inc. */

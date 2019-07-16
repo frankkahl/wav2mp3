@@ -1,15 +1,15 @@
 #ifndef TIOSTREAM_H
 #define TIOSTREAM_H
 
-#include "thread_includes.h"
 #include <iostream>
 #include <string>
+#include "thread_includes.h"
 
 // wrapper class to make streams inherited from std::ostream
 // thread safe
 
 class tostream {
-   public:
+  public:
     tostream(std::ostream &stream);
     template <typename T>
     tostream &operator<<(const T &out) {
@@ -18,13 +18,13 @@ class tostream {
         return *this;
     }
 
-   private:
+  private:
     static pthread::mutex _mutex;
-    std::ostream &_stream;
+    std::ostream &        _stream;
 };
 
 // declare thread safe instances encapsulating cout and cerr instatiated in tiostream.cpp
 extern tostream tcout;
 extern tostream tcerr;
 
-#endif // TIOSTREAM_H
+#endif  // TIOSTREAM_H

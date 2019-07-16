@@ -1,12 +1,12 @@
 //
-// imports function "check_arguments" for checking validity of command line arguments
+// imports function "check_directory" for checking if a given path does exist, is a directory and is accessible
 //
 
-#ifndef ARGUMENT_PROCESSING_H
-#define ARGUMENT_PROCESSING_H
+#ifndef CHECK_DIRECTORY_H
+#define CHECK_DIRECTORY_H
 
-#include <filesystem>   // forward declarations could be used here but they can be very error prone, see:
-						// https://google.github.io/styleguide/cppguide.html#Forward_Declarations
+#include <filesystem>  // forward declarations could be used here but they can be very error prone, see:
+                       // https://google.github.io/styleguide/cppguide.html#Forward_Declarations
 
 /*!
  * Used for checking the command line arguments passed to main()
@@ -20,6 +20,6 @@
  * in case of failure an empty directory_iterator is returned.
  * Status and error messages are written to cout and cerr, respectively.
  */
-std::filesystem::recursive_directory_iterator check_arguments(int argc, const char* argv[]);
+std::filesystem::recursive_directory_iterator check_directory(const std::string &passed_path);
 
-#endif // ARGUMENT_PROCESSING_H
+#endif  // CHECK_DIRECTORY_H

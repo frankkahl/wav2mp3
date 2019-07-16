@@ -3,7 +3,7 @@
 #include "thread_includes.h"
 using namespace std;
 
-static int return_code = RET_CODE_OK;
+static int            return_code = RET_CODE_OK;
 static pthread::mutex return_code_mutex;
 
 int get_return_code() {

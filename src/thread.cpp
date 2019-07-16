@@ -3,14 +3,20 @@
 
 // the id of the thread creating an instance of "thread" is used as invalid thread id
 // since a successfully created thread always have an id differing from the that of the creating thead
-pthread::thread::thread() noexcept : _invalid_pthread(pthread_self()), _thread(pthread_self()) {}
+pthread::thread::thread() noexcept
+    : _invalid_pthread(pthread_self())
+    , _thread(pthread_self()) {
+}
 
-pthread::thread::thread(void *(*thread_function)(void *), void *arg_ptr) : _invalid_pthread(pthread_self()) {
+pthread::thread::thread(void *(*thread_function)(void *), void *arg_ptr)
+    : _invalid_pthread(pthread_self()) {
     int res = pthread_create(&_thread, nullptr, thread_function, arg_ptr);
     check_pthread_error(res, "pthread_create");
 }
 
-void pthread::thread::join() { pthread_join(_thread, nullptr); }
+void pthread::thread::join() {
+    pthread_join(_thread, nullptr);
+}
 
 pthread::thread::~thread() {
     if (!pthread_equal(_thread, _invalid_pthread)) {

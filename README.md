@@ -1,22 +1,43 @@
 # wav2mp3
+command line tool for converting all WAV audio files in a directory
+and and optionally in all its sub-folders to MP3.
+Under Windows all external libraries have been statically linked to reduce
+dependency problems.
 
-command line tool for converting all WAV audio files in a folder
-and all its sub-folders into MP3. All files of a supported format are converted,
-regardless of their file extension. Currently a fixed lame quality setting
-of 5 is used.
+current version: 0.9.0
 
-1. Description
-   - command line tool
+1. wav2mp3 --help output:
+
+        wav2mp3.exe 0.9.0 using lame 3.100 and pthreads: converts all WAV files in passed directory to MP3
+        Usage:
+          wav2mp3.exe [OPTION...] directory
+
+          -h, --help         print help
+          -v, --version      print version
+          -r, --recursive    recurse through all sub-directories
+          -o, --overwrite    overwrite existing MP3 files instead of creating one
+                             with an alternative name not used yet
+          -q, --quality arg  set quality level of MP3 compression (integer between 0
+                             (highest) and 9 (lowest)) (default: 5)
+          -a, --all          try to convert all files, not only those with the
+                             extension .wav.
+          -t, --threads arg  number of threads (maximum 4) (default: 4)
+
+2. Description
    - tested under Linux (Ubuntu 18.04)
      and Windows (Windows 7)
-   - root folder is passed as first argument.
    - a WAV file of name "<name>.wav" is converted into an MP3 with the file name
-     "<name>.mp3". If such a file already exists the resulting MP3 has the name
+     "<name>.mp3". If such a file already exists it will be
+     overwritten if the command line option -o/--overwrite is passed.
+     Otherwise the resulting MP3 has the name
      "<name> (n).mp3" where n is the first index for which not already
-     an MP3 file exists. An existing MP3 file is never overwritten.
-   - uses the lame 3.100 library for MP3 encoding
-   - uses as many threads as cores are available
-   - can be interrupted by pressing Ctrl-C
+     an MP3 file exists.
+   - uses the lame 3.100 library for MP3 encoding (http://lame.sourceforge.net/)
+   - uses cxxopts 2.2.0 for command line processing (https://github.com/jarro2783/cxxopts)
+   - by default uses as many threads as cores are available.
+     This can be changed using the command line parameter -t/--threads
+   - can be interrupted by pressing Ctrl-C or sending SIGTERM
+   - compresion quality can be set via command line (default is 5)
    - supported formats are:
      - PCM:
        - 8, 16, 24, 32 bit integer, mono or stereo
@@ -31,15 +52,19 @@ of 5 is used.
 
 2. Compiling from sources
    - uses C++ 17 Standard
-   - requires VS 2017 under Windows and
+   - requires VS 2017 under Windows (tested with MSVC 19.16.27030.1) and
      GCC 9.1 under Linux
    - requires CMake 3.14 for building (must be in search path)
    - can be configured to use either
      - pthreads (POSIX 1003.1-2001) or
      - C++ native threading library (since C++ 11)
    - Windows:
-     - links statically against LAME 3.10 (see http://lame.sourceforge.net/)
-       and - if used - pthreads (POSIX 1003.1-2001)
+     - links statically against:
+         * LAME 3.100 (see http://lame.sourceforge.net/)
+         * pthreads (POSIX 1003.1-2001)
+           (see https://sourceforge.net/projects/pthreads4w/)
+           (not if the native C++ threads are used)
+         * Visual Studio standard libs (/MT and /MTd compiler switches)
      - precompiled static libraries of LAME and pthreads are included
      - build by executing:
        - build_wav2mp3.bat (pthreads version) or
@@ -62,11 +87,7 @@ of 5 is used.
    - Linux:   bin/linux/release/wav2mp3
 
 4. To Do:
-   - Adding command line switches for:
-     - recursive/non-recursive directory processing
-     - overwriting already existing MP3 files
-     - setting lame encoding quality
-   - Transferring all meta informations found (e.g. Author, Album etc.)
+   - Transferring all meta informations (e.g. Author, Album etc.)
      found in the WAV file to ID3 Tags
 
 5. Licenses:

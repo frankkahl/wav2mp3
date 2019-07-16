@@ -11,7 +11,7 @@
 //    - static function termination_request() returns true if SIGINT and/or SIGTERM was received
 //      and false otherwise
 class SignalHandler {
-   public:
+  public:
     SignalHandler();
     virtual ~SignalHandler();
 
@@ -19,10 +19,10 @@ class SignalHandler {
     // and false otherwise
     static bool termination_requested();
 
-   private:
-    static bool _termination_requested;
+  private:
+    static bool           _termination_requested;
     static pthread::mutex _mutex;
-    static void signal_handler(int signal_code);
+    static void           signal_handler(int signal_code);
 };
 
 #endif  // SIGNAL_HANDLER

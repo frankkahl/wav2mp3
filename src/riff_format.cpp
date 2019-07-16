@@ -277,7 +277,7 @@ map<uint16_t, string> audio_format_uint16_to_names = {
     {WAVE_FORMAT_FRACE_TELECOM_G729, "FRACE_TELECOM_G729"},                 /* France Telecom */
     {WAVE_FORMAT_CODIAN, "CODIAN"},                                         /* CODIAN */
     {WAVE_FORMAT_FLAC, "FLAC"},                                             /* flac.sourceforge.net */
-    {WAVE_FORMAT_EXTENSIBLE, "WAVE_FORMAT_EXTENSIBLE"}                                  /* Microsoft */
+    {WAVE_FORMAT_EXTENSIBLE, "WAVE_FORMAT_EXTENSIBLE"}                      /* Microsoft */
 };
 
 map<Guid, string> audio_format_guid_to_names = {
@@ -293,8 +293,8 @@ map<Guid, string> audio_format_guid_to_names = {
 
 //// helper for swapping key, value of a map
 //// This function assumes that all values of the passed map are unique
-//template <class T1, class T2>
-//static map<T2, T1> swap_keys_values(const map<T1, T2>& m) {
+// template <class T1, class T2>
+// static map<T2, T1> swap_keys_values(const map<T1, T2>& m) {
 //    map<T2, T1> m1;
 //
 //    for (auto&& item : m) {
@@ -304,5 +304,5 @@ map<Guid, string> audio_format_guid_to_names = {
 //    return m1;
 //};
 //
-//extern map<string, uint16_t> audio_format_names_to_uint16 = swap_keys_values(audio_format_uint16_to_names);
-//extern map<string, Guid> audio_format_names_to_guid = swap_keys_values(audio_format_guid_to_names);
+// extern map<string, uint16_t> audio_format_names_to_uint16 = swap_keys_values(audio_format_uint16_to_names);
+// extern map<string, Guid> audio_format_names_to_guid = swap_keys_values(audio_format_guid_to_names);

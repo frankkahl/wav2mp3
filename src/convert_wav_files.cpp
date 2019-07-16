@@ -345,6 +345,18 @@ bool case_insensitive_compare(const string &a, const string &b) {
 }
 
 /*!
+ *  helper function for output formatting
+ */
+static string get_path_relative_to_top_level(const fs::path &in_file_name) {
+    std::error_code ec;
+    auto            output_path = fs::proximate(in_file_name, fs::path(Configuration::directory_path()), ec);
+    if (ec) {
+        output_path = in_file_name;  // if getting the relative path fails in any way use the absolute path
+    }
+    return output_path.string();
+}
+
+/*!
  *  Creates the MP3 file and associates it with the passed stream "out_file".
  *  The path of the MP3 file is generated using the following rules:
  *     - if in_file_name has a ".wav" file ending replace it by ".mp3",
@@ -389,7 +401,7 @@ static tuple<bool, string> open_output_stream(const fs::path &in_file_name, cons
     if (case_insensitive_compare(in_file_name.extension().string(), ".wav")) {
         mp3_path_base = in_file_name.parent_path() / in_file_name.stem();
     } else {
-        status_line << "WARNING: \"" << in_file_name.filename().string()
+        status_line << "WARNING: \"" << get_path_relative_to_top_level(in_file_name)
                     << "\" does not end with \".wav\" but is a valid WAV file." << endl
                     << "            ";
         mp3_path_base = in_file_name;
@@ -440,12 +452,7 @@ static tuple<bool, string> open_output_stream(const fs::path &in_file_name, cons
     // and associated to the passed stream => write status message
     // first get the relative path of the converted WAV file relative to the top
     // level directory
-    std::error_code ec;
-    auto            output_path = fs::proximate(in_file_name, fs::path(Configuration::directory_path()), ec);
-    if (ec) {
-        output_path = in_file_name;  // if getting the relative path fails in any way use the absolute path
-    }
-    status_line << "\"" << output_path.string() << "\"\t";
+    status_line << "\"" << get_path_relative_to_top_level(in_file_name) << "\"\t";
     status_line << " (" << in_file_info << ") \t-> ";
     status_line << "\"" << mp3_path.filename().string() << "\"\t";
     return make_tuple(true, status_line.str());
@@ -665,8 +672,8 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
             // only print an error if the file name ends with a .wav extension
             if (case_insensitive_compare(filename.extension().string(), ".wav")) {
                 ss.str("");
-                ss << ERROR_PREFIX << "Opening \"" << filename.filename().string() << "\" failed, check permissions."
-                   << endl;
+                ss << ERROR_PREFIX << "Opening \"" << get_path_relative_to_top_level(filename)
+                   << "\" failed, check permissions." << endl;
                 tcerr << ss.str();
             }
         }
@@ -678,8 +685,8 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
             // only print an error if the file name ends with a .wav extension
             if (case_insensitive_compare(filename.extension().string(), ".wav")) {
                 ss.str("");
-                ss << ERROR_PREFIX << "\"" << filename.filename().string() << "\" is not a valid RIFF file: " << message
-                   << endl;
+                ss << ERROR_PREFIX << "\"" << get_path_relative_to_top_level(filename)
+                   << "\" is not a valid RIFF file: " << message << endl;
                 tcerr << ss.str();
             }
             return;
@@ -692,8 +699,8 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
         tie(was_successful, format_header, pcm_data_position, message) = is_valid_wav_file(*file, chunk_positions);
         if (!was_successful) {
             ss.str("");
-            ss << ERROR_PREFIX << "\"" << filename.filename().string() << "\" is not a valid WAV file: " << message
-               << endl;
+            ss << ERROR_PREFIX << "\"" << get_path_relative_to_top_level(filename)
+               << "\" is not a valid WAV file: " << message << endl;
             tcerr << ss.str();
             return;
         }
@@ -719,7 +726,7 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
 
     } catch (const exception &e) {
         ss.str("");
-        ss << ERROR_PREFIX << "converting \"" << filename.filename().string() << "\" failed:" << e.what() << endl;
+        ss << ERROR_PREFIX << "converting \"" << get_path_relative_to_top_level(filename) << "\" failed:" << e.what() << endl;
         tcerr << ss.str();
     }
 }

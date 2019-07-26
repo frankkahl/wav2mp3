@@ -3,7 +3,7 @@
 # replaces the DLL runtime linking flags with the static ones
 set(CMAKE_USER_MAKE_RULES_OVERRIDE_CXX  ${CMAKE_CURRENT_SOURCE_DIR}/cxx_link_stdlib_static_overrides.cmake)
 
-project ("wav2mp3" VERSION "0.9.0" DESCRIPTION "Command line tool for converting WAV audio files to MP3.")
+project ("wav2mp3" VERSION "1.0.0" DESCRIPTION "Command line tool for converting WAV audio files to MP3.")
 add_compile_definitions(WAV2MP3_VERSION="${CMAKE_PROJECT_VERSION}")
 add_compile_definitions(WAV2MP3_NAME="${CMAKE_PROJECT_NAME}")
 

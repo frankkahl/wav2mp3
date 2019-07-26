@@ -1,0 +1,14 @@
+1.0.0:
+   - Meta data in INFO-LIST chunks transferred to MP3 id3 v2 tags
+0.9.0: first released version supporting:
+   - uncompressed PCM like WAV files:
+     - PCM: regular: int 8,16,24,32 bit
+            Windows extended: int 8-32 bits (in one bit increment)
+     - IEEE FLOAT: regular + Windows extended: float 32, 64 bit
+   - command line parameters for selecting
+     - encoding quality (0-9),
+     - number of threads used,
+     - if recursing into sub-directories
+     - already existing MP3 files should be overwritten
+
+

@@ -51,83 +51,55 @@ typedef struct ChunkPosition {
 typedef std::map<std::string, ChunkPosition> ChunkPositionMap;
 
 /*!
- *   Tries to read the the RIFF master header (see RiffHeader in riff_format.h)
- *   returns: if successful: tuple(true, <empty string>)
- *            on failure: tuple(false, <error message>)
- */
-static tuple<bool, string> read_and_check_riff_section(ifstream &file, const uintmax_t file_size) {
-    RiffHeader   header;
-    stringstream ss;  // for composing error message to return in case of failure
-    if (file_size < sizeof(header)) {
-        ss << "file too small for even the RIFF header";
-        return make_tuple(false, ss.str());
-    }
-    file.read((char *)&header, sizeof(header));
-    if (file.fail()) {
-        ss << "Reading the RIFF header failed: this error should never happen from the humble perspective of the poor "
-              "programmmer."
-           << endl;
-        return make_tuple(false, ss.str());
-    }
-    // check sanity of RIFF chunk first
-    if (string(header.riff_id, sizeof(header.riff_id)) != "RIFF") {
-        ss << "FOURCC id of first chunk is not \"RIFF\"";
-        return make_tuple(false, ss.str());
-    }
-    if (header.total_data_size > file_size - sizeof(header.riff_id) - sizeof(header.total_data_size)) {
-        ss << "total file size is smaller than total data size the RIFF header claims to be present";
-        return make_tuple(false, ss.str());
-    }
-    auto format = string(header.format, sizeof(header.format));
-    if (format != "WAVE") {
-        ss << "unsupported format \"" << format << "\" instead of \"WAVE\"";
-        return make_tuple(false, ss.str());
-    }
-    return make_tuple(true, string());
-}
-
-/*!
- * Checks if the passed filestream points to a valid RIFF file.
+ * Read all chunks from file starting at stream position start to at max the stream position start + max_data_size
  * Returns a tuple of:
  *     - ChunkPositionMap: maps the FOURCC chunk ids of all valid chunks found to
  *       the positions and sizes of their data blocks.
  *       If empty then either the file is not a RIFF file or it is corrupt.
  *     - string: is empty if everything went fine, otherwise it contains a warning or error message.
  */
-static tuple<ChunkPositionMap, string> is_valid_riff_file(ifstream &file, const uintmax_t file_size) {
-    stringstream     ss;
-    ChunkPositionMap chunk_positions;
-    auto [was_successful, message] =
-        read_and_check_riff_section(file, file_size);  // better to unpack and the repack for return instead of
-                                                       // checking for the success code by the cryptic statement
-                                                       // std::get<0>(tuple)
-    if (!was_successful) {
-        return make_tuple(chunk_positions, message);
-    }
 
+static tuple<ChunkPositionMap, string> read_all_chunks(ifstream &file, const streampos &start,
+                                                       const streamsize &max_data_size) {
     // now inspect all chunks and store their positions and sizes
+    ostringstream    ss;
+    ChunkPositionMap chunk_positions;
+    file.seekg(start);
+
+    auto pad_data_size = [](const streamsize chunk_data_size) {
+        streamsize padded_data_size = chunk_data_size / sizeof(uint16_t) * sizeof(uint16_t);
+        if (chunk_data_size % sizeof(uint16_t)) {
+            padded_data_size += sizeof(uint16_t);
+        }
+        return padded_data_size;
+    };
+
+    streamsize padded_max_data_size = pad_data_size(max_data_size);
     while (!(file.eof() || file.fail())) {
         char     chunk_id_raw[4];
-        uint32_t valid_data_size;
+        uint32_t chunk_data_size;
 
         file.read(chunk_id_raw, sizeof(chunk_id_raw));                 // first read FOURCC id of chunk
-        file.read((char *)&valid_data_size, sizeof(valid_data_size));  // then the size of valid data in the data block
+        file.read((char *)&chunk_data_size, sizeof(chunk_data_size));  // then the size of valid data in the data block
         if (file.eof() || file.fail()) {
             ss << "Reading chunk id and size failed.";
             break;
         }
-        auto chunk_id = string(chunk_id_raw, sizeof(chunk_id_raw));
+        streamsize padded_chunk_data_size = pad_data_size(chunk_data_size);
+
+        string chunk_id(chunk_id_raw, sizeof(chunk_id_raw));
         // store start of data position in ChunkPosition struct first
         // but do NOT store it yet...
-        ChunkPosition chunk_pos = {file.tellg(), valid_data_size};
+        ChunkPosition chunk_pos = {file.tellg(), chunk_data_size};
 
         // ... first advance pointer to the position of the last byte of the valid data block according to
-        // valid_data_size
-        file.seekg(valid_data_size - 1, ios_base::cur);
+        // padded_chunk_data_size
+        file.seekg(chunk_data_size - 1, ios_base::cur);
         // then peek for the byte to enforce the eofbit or failbit to be set if not enough data is available
         file.peek();
-        if (file.eof() || file.fail()) {
-            ss << "less data available as claimed in chunk \"" << chunk_id << "\"";
+        // check also if the chunk claims to reach beyond the padded_max_data_size
+        if (file.eof() || file.fail() || (chunk_pos.start + padded_chunk_data_size > start + padded_max_data_size)) {
+            ss << "less data available as claimed in chunk \"" << chunk_id << "\" => discard it";
             break;
         }
         // only if the claimed data is really there consider the chunk valid
@@ -137,29 +109,78 @@ static tuple<ChunkPositionMap, string> is_valid_riff_file(ifstream &file, const 
         }
         chunk_positions[chunk_id] = chunk_pos;
 
-        // the size of a data block is always padded to the nearest word boundary
-        // => calculate this padded size from the size of the valid data frame
-        uint32_t padded_data_size = valid_data_size / sizeof(uint16_t) * sizeof(uint16_t);
-        if (valid_data_size % sizeof(uint16_t)) {
-            padded_data_size += sizeof(uint16_t);
-        }
-
         // now forward by the number of padding bytes plus 1 to set the pointer to the beginning of the next chunk
         // adding 1 is needed since the pointer currently points to the last byte of the current data block,
         // not one position behind it
-        file.seekg(padded_data_size - valid_data_size + 1, ios_base::cur);
+        file.seekg(padded_chunk_data_size - chunk_data_size + 1, ios_base::cur);
         file.peek();  // if peeking the next byte just sets the eofbit without setting the failbit or badbit
-                      // then the RIFF file is well formed, so no warning or error message is set
-        if (file.eof() && !file.fail()) {
+                      // the file does not extend beyond the chunk with some unexpected data
+                      // the same is true if the end of the chunk id identical with the max_data_size
+                      // => break the loop gracefully
+        if ((file.eof() && !file.fail())
+            || (chunk_pos.start + padded_chunk_data_size == start + padded_max_data_size)) {
+            long long a = chunk_pos.start + padded_chunk_data_size;
+            long long b = start + padded_max_data_size;
             break;
         }
     }
-    // cout << "--- found chunks: ";
-    // for (auto const &[key, value] : chunk_positions) {
+    //// leave this debug code in for now
+    //cout << "--- found chunks: ";
+    //for (auto const &[key, value] : chunk_positions) {
     //    cout << '"' << key << '"' << "  ";
     //}
-    // cout << endl;
+    //cout << endl;
+
     return make_tuple(chunk_positions, ss.str());
+}
+
+/*!
+ * Checks if the passed chunks contain a chunk with FOURCC chunk_name_fourcc
+ * and if at the very beginning of the data block the FOURCC format_type_fourcc is stored
+ * If yes try to interpret the residual data block as a list of sub-chunks
+ * If that fails return an empty ChunkPositionMap together with an error string
+ * Returns a tuple of:
+ *     - ChunkPositionMap: maps the FOURCC chunk ids of all valid chunks found to
+ *       the positions and sizes of their data blocks.
+ *       If empty then either the file is not a RIFF file or it is corrupt.
+ *     - string: is empty if everything went fine, otherwise it contains a warning or error message.
+ */
+static tuple<ChunkPositionMap, string> is_chunk_with_format_type_and_subchunks_present(
+    ifstream &file, const ChunkPositionMap &chunks, const std::string &chunk_name_fourcc,
+    const std::string &format_type_fourcc = std::string()) {
+    ChunkPositionMap riff_sub_chunks;
+    ostringstream    ss;
+    if (!chunks.count(chunk_name_fourcc)) {
+        ss << "No " << chunk_name_fourcc << " chunk found";
+        return make_tuple(riff_sub_chunks, ss.str());
+    }
+    const ChunkPosition &riff_chunk = chunks.find(chunk_name_fourcc)->second;
+    file.seekg(riff_chunk.start);
+
+    size_t size_of_format_type = 0;
+    if (!format_type_fourcc.empty()) {
+        char format_raw[4];
+        size_of_format_type = sizeof(format_raw);
+        file.read(format_raw, sizeof(format_raw));
+        string format(format_raw, sizeof(format_raw));
+        if (format != format_type_fourcc) {
+            ss << "unsupported format \"" << format << "\" specifier instead of \"" << format_type_fourcc
+               << "\"; try to ";
+            return make_tuple(riff_sub_chunks, ss.str());
+        }
+    }
+    return read_all_chunks(file, file.tellg(), riff_chunk.data_size - size_of_format_type);
+}
+
+/*! Checks if the chunks contain a valid "LIST" chunk of fomrmat type "INFO", extract its sub-chunks containing the
+ *  meta data and adds them to the passed meta_info_chunks. In case a certain sub-chunk is already present in
+ *  meta_info_chunks it is overwritten with the new one
+ */
+void aggregate_meta_data(ifstream &infile, ChunkPositionMap &chunks, ChunkPositionMap &meta_info_chunks,
+                         const std::string &chunk_fourcc, const std::string &format_type_fourcc = std::string()) {
+    auto const &[new_meta_info_chunks, message] =
+        is_chunk_with_format_type_and_subchunks_present(infile, chunks, chunk_fourcc, format_type_fourcc);
+    meta_info_chunks.insert(new_meta_info_chunks.begin(), new_meta_info_chunks.end());
 }
 
 /*!
@@ -460,7 +481,7 @@ static tuple<bool, string> open_output_stream(const fs::path &in_file_name, cons
 
 // helper function for printing an error of format
 //       (<thread_number>) <message>: <error>
-void print_error(const string &message, const string &error) {
+static void print_error(const string &message, const string &error) {
     ostringstream ss;
     ss << ERROR_PREFIX << message << "failed: " << endl;
     ss << SPACES_PREFIX << error << endl;
@@ -468,9 +489,56 @@ void print_error(const string &message, const string &error) {
     set_return_code(RET_CODE_CONVERTING_SOME_FILES_FAILED);
 };
 
+// adds all id3 v2 tags for which corresponding info chunks are present in the passed meta_data
+static void create_id3_v2_tags(LameInit &lame_guard, shared_ptr<ifstream> in, const ChunkPositionMap &meta_data) {
+    // template lambda function (see auto keyword in front of (*setter) requires C++ 14)
+    auto set_tag = [&lame_guard, in, &meta_data](auto (*setter)(lame_t, const char *), string list_info_fourcc) {
+        if (!meta_data.count(list_info_fourcc)) {
+            return;
+        }
+        // use this rather annoying syntax to access the element instead of
+        // just meta_data.find(list_info_fourcc)
+        auto start     = meta_data.find(list_info_fourcc)->second.start;
+        auto data_size = meta_data.find(list_info_fourcc)->second.data_size;
+        in->seekg(start);
+        unique_ptr<char> tag_string_raw(new char[data_size]);
+        in->read(tag_string_raw.get(), data_size);
+        if (strlen(tag_string_raw.get()) >= (std::size_t)data_size) {
+            // if the chunk data does not contain a null byte to mark a null terminated string
+            // consider the tag invalid and just silently ignore it
+            return;
+        }
+        // leave this debug code in for now
+        //ostringstream ss;
+        //ss << list_info_fourcc << ": " << tag_string_raw.get() << endl;
+        //tcout << ss.str();
+        setter(lame_guard, tag_string_raw.get());
+    };
+    id3tag_init(lame_guard);
+    id3tag_v2_only(lame_guard); // do not support ancient outdated id3 v1 tags by purpose
+
+    set_tag(id3tag_set_title, "INAM");
+    set_tag(id3tag_set_artist, "IART");
+    set_tag(id3tag_set_album, "IMED");
+    set_tag(id3tag_set_year, "ICRD");
+    // several tags found which claim to mark comments
+    // assume that only one will be present
+    // if more are present the ICMT one takes precedence
+    set_tag(id3tag_set_comment, "COMM");
+    set_tag(id3tag_set_comment, "CMNT");
+    set_tag(id3tag_set_comment, "ICMT");
+    // also more than one ID for genre found
+    set_tag(id3tag_set_track, "TRCK");
+    set_tag(id3tag_set_track, "ITRK");
+    // also more than one ID for genre found
+    set_tag(id3tag_set_genre, "GENR");
+    set_tag(id3tag_set_genre, "IGNR");
+}
+
 // calls the config functions of lame according to the content of the header
 // and the encoding quality returned by Configuration::encoding_quality()
-static bool config_lame(LameInit &lame_guard, const string &message, const FormatHeader &header) {
+static bool config_lame(LameInit &lame_guard, shared_ptr<ifstream> &in, const string &message,
+                        const FormatHeader &header, const ChunkPositionMap &list_info_chunk_meta_data) {
     if (!lame_guard.is_initialized()) {
         string error = "lame_init() failed";
         print_error(message, error);
@@ -478,6 +546,7 @@ static bool config_lame(LameInit &lame_guard, const string &message, const Forma
     }
     int res = 0;
     try {
+        create_id3_v2_tags(lame_guard, in, list_info_chunk_meta_data);
         res = lame_set_num_channels(lame_guard, header.num_channels);
         LameInit::check_error(res, "lame_set_num_channels");
         res = lame_set_in_samplerate(lame_guard, header.samples_per_second);
@@ -580,7 +649,7 @@ void convert_ieee_float_chunk(LameInit &lame_guard, std::shared_ptr<std::ifstrea
 // containing the thread number, so I leave it in for now
 static void convert_file_worker(shared_ptr<ifstream> in, shared_ptr<ofstream> out, const fs::path out_filename,
                                 const FormatHeaderExtensible header_extensible, const ChunkPosition pcm_data_position,
-                                string message, uint16_t thread_number) {
+                                string message, ChunkPositionMap list_info_chunk_meta_data, uint16_t thread_number) {
     // Define a lambda function for discard incomplete mp3 file in case of an error
     auto remove_mp3_file = [&out, &out_filename]() {
         out->close();
@@ -594,7 +663,7 @@ static void convert_file_worker(shared_ptr<ifstream> in, shared_ptr<ofstream> ou
         LameInit            lame_guard;  // Initializes lame on construction and closes it on destruction
                               // can be used as first argument of type lame_global_flags for all lame functions
         // configure lame according to the info in header
-        if (!config_lame(lame_guard, message, header)) {
+        if (!config_lame(lame_guard, in, message, header, list_info_chunk_meta_data)) {
             return;
         }
         // move to stream position where the data starts
@@ -679,9 +748,12 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
         }
 
         // check if a valid RIFF file
-        auto [chunk_positions, message] = is_valid_riff_file(*file, file_size);
-
-        if (chunk_positions.empty()) {
+        // first read all top level chunks. A valid RIFF file contains at least one "RIFF" chunk
+        auto [top_level_chunks, message] = read_all_chunks(*file, 0, file_size);
+        ChunkPositionMap riff_chunks;
+        tie(riff_chunks, message) =
+            is_chunk_with_format_type_and_subchunks_present(*file, top_level_chunks, "RIFF", "WAVE");
+        if (riff_chunks.empty()) {
             // only print an error if the file name ends with a .wav extension
             if (case_insensitive_compare(filename.extension().string(), ".wav")) {
                 ss.str("");
@@ -692,11 +764,18 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
             return;
         }
 
+        // now aggregate the sub-chunks of all "LIST" chunks with format type "INFO" present in the top level chunks
+        // and in the sub-chunks of the RIFF chunk. The info in the "LIST" chunk contained as "RIFF" sub-chunks takes
+        // precedence
+        ChunkPositionMap meta_data;
+        aggregate_meta_data(*file, top_level_chunks, meta_data, "LIST", "INFO");
+        aggregate_meta_data(*file, riff_chunks, meta_data, "LIST", "INFO");
+
         // check if RIFF file is a valid WAV file with supported content
         FormatHeaderExtensible format_header;
         ChunkPosition          pcm_data_position;
         bool                   was_successful;
-        tie(was_successful, format_header, pcm_data_position, message) = is_valid_wav_file(*file, chunk_positions);
+        tie(was_successful, format_header, pcm_data_position, message) = is_valid_wav_file(*file, riff_chunks);
         if (!was_successful) {
             ss.str("");
             ss << ERROR_PREFIX << "\"" << get_path_relative_to_top_level(filename)
@@ -714,8 +793,8 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
         if (was_successful) {
             string error;
             using std::placeholders::_1;
-            function<void(const std::uint16_t)> fct =
-                bind(convert_file_worker, file, out_file, out_filename, format_header, pcm_data_position, message, _1);
+            function<void(const std::uint16_t)> fct = bind(convert_file_worker, file, out_file, out_filename,
+                                                           format_header, pcm_data_position, message, meta_data, _1);
             // submit actual conversion function to thread pool
             thread_pool.enqueue(fct);
         } else {
@@ -726,7 +805,8 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
 
     } catch (const exception &e) {
         ss.str("");
-        ss << ERROR_PREFIX << "converting \"" << get_path_relative_to_top_level(filename) << "\" failed:" << e.what() << endl;
+        ss << ERROR_PREFIX << "converting \"" << get_path_relative_to_top_level(filename) << "\" failed:" << e.what()
+           << endl;
         tcerr << ss.str();
     }
 }

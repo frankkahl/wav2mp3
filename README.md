@@ -4,7 +4,7 @@ and and optionally in all its sub-folders to MP3.
 Under Windows all external libraries have been statically linked to reduce
 dependency problems.
 
-current version: 0.9.0
+current version: 1.0.0
 
 1. wav2mp3 --help output:
 
@@ -37,7 +37,7 @@ current version: 0.9.0
    - by default uses as many threads as cores are available.
      This can be changed using the command line parameter -t/--threads
    - can be interrupted by pressing Ctrl-C or sending SIGTERM
-   - compresion quality can be set via command line (default is 5)
+   - compression quality can be set via command line (default is 5, 0-9 are allowd)
    - supported formats are:
      - PCM:
        - 8, 16, 24, 32 bit integer, mono or stereo
@@ -49,7 +49,12 @@ current version: 0.9.0
            mono or stereo
        - IEEE_FLOAT:
        	 - 32, 64 bit float, mono or stereo
-
+   - Meta data in a potentially present LIST chunk with format-type INFO are transferred to
+     ID3 tags
+     REMARK: Storing meta data in a LIST-chunk of format INFO is the standard but poorly used.
+             Instead storing meta data in an "id3 "-chunk seems to be the unofficial but de-facto
+	     standard supported by the majority of the software, including the Windows Explorer!
+	     => planned to support transfer of "id3 "-chunks in version 1.1.0
 2. Compiling from sources
    - uses C++ 17 Standard
    - requires VS 2017 under Windows (tested with MSVC 19.16.27030.1) and
@@ -87,10 +92,8 @@ current version: 0.9.0
    - Linux:   bin/linux/release/wav2mp3
 
 4. To Do:
-   - Transferring all meta informations (e.g. Author, Album etc.)
-     found in the WAV file to ID3 Tags
+   - Transferring all meta data (e.g. Author, Album etc.)
+     in a potentially present "id3 " chunk to the MP3 file
 
 5. Licenses:
    - see file "LICENSE"
-
-

@@ -7,7 +7,7 @@
     * audacious (for testing MP3 files created with wav2mp3)
   using the following commands:
 
-     # git 3.14.5 as snap package										       
+     # cmake 3.14.5 as snap package										       
      sudo apt-get update											       
      sudo apt-get install git										       
      sudo snap  install cmake --classic									       

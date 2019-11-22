@@ -33,6 +33,7 @@ set(CPPFILES
   "${SOURCES}/signal_handler.cpp"
   "${SOURCES}/return_code.cpp"
   "${SOURCES}/configuration.cpp"
+  "${SOURCES}/id3_tags.cpp"
   )
 
 set(HFILES
@@ -49,6 +50,8 @@ set(HFILES
   "${SOURCES}/thread_includes.h"
   "${SOURCES}/return_code.h"
   "${SOURCES}/configuration.h"
+  "${SOURCES}/chunk_descriptor.h"
+  "${SOURCES}/id3_tags.h"
  )
 
 ## if pthreads are used, add the headers and source files encapsulating

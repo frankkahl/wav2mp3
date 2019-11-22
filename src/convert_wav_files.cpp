@@ -14,6 +14,7 @@
 
 #include "convert_wav_files.h"
 
+#include "chunk_descriptor.h"
 #include "configuration.h"
 #include "lame_init.h"
 #include "return_code.h"
@@ -40,30 +41,20 @@
 namespace fs = std::filesystem;
 using namespace std;
 
-// helper type storing both the start offset and the size of the data payload
-// of a chunk
-typedef struct ChunkPosition {
-    std::streampos  start;  // position to pass to ifstream::seekg(...) to move file pointer to beggining of chunk data
-    std::streamsize data_size = 0;  // size of chunk data.
-} ChunkPosition;
-
-// helper type mapping the chunk id to the position information of its data
-typedef std::map<std::string, ChunkPosition> ChunkPositionMap;
-
 /*!
- * Read all chunks from file starting at stream position start to at max the stream position start + max_data_size
- * Returns a tuple of:
- *     - ChunkPositionMap: maps the FOURCC chunk ids of all valid chunks found to
+ * Read all chunk descriptors from file starting at stream position start to at max the stream position start +
+ * max_data_size Returns a tuple of:
+ *     - ChunkDescriptorMap: maps the FOURCC chunk ids of all valid chunks found to
  *       the positions and sizes of their data blocks.
  *       If empty then either the file is not a RIFF file or it is corrupt.
  *     - string: is empty if everything went fine, otherwise it contains a warning or error message.
  */
 
-static tuple<ChunkPositionMap, string> read_all_chunks(ifstream &file, const streampos &start,
-                                                       const streamsize &max_data_size) {
+static tuple<ChunkDescriptorMap, string> read_all_chunk_descriptors(ifstream &file, const streampos &start,
+                                                                    const streamsize &max_data_size) {
     // now inspect all chunks and store their positions and sizes
-    ostringstream    ss;
-    ChunkPositionMap chunk_positions;
+    ostringstream      ss;
+    ChunkDescriptorMap chunk_descriptors;
     file.seekg(start);
 
     auto pad_data_size = [](const streamsize chunk_data_size) {
@@ -88,9 +79,9 @@ static tuple<ChunkPositionMap, string> read_all_chunks(ifstream &file, const str
         streamsize padded_chunk_data_size = pad_data_size(chunk_data_size);
 
         string chunk_id(chunk_id_raw, sizeof(chunk_id_raw));
-        // store start of data position in ChunkPosition struct first
+        // store start of data position in ChunkDescriptor struct first
         // but do NOT store it yet...
-        ChunkPosition chunk_pos = {file.tellg(), chunk_data_size};
+        ChunkDescriptor chunk_pos = {file.tellg(), chunk_data_size};
 
         // ... first advance pointer to the position of the last byte of the valid data block according to
         // padded_chunk_data_size
@@ -103,11 +94,11 @@ static tuple<ChunkPositionMap, string> read_all_chunks(ifstream &file, const str
             break;
         }
         // only if the claimed data is really there consider the chunk valid
-        // an add it to the chunk_positions
-        if (chunk_positions.count(chunk_id)) {
+        // an add it to the chunk_descriptors
+        if (chunk_descriptors.count(chunk_id)) {
             ss << "multiple \"" << chunk_id << "\" chunks found, using the latest one. ";
         }
-        chunk_positions[chunk_id] = chunk_pos;
+        chunk_descriptors[chunk_id] = chunk_pos;
 
         // now forward by the number of padding bytes plus 1 to set the pointer to the beginning of the next chunk
         // adding 1 is needed since the pointer currently points to the last byte of the current data block,
@@ -125,36 +116,36 @@ static tuple<ChunkPositionMap, string> read_all_chunks(ifstream &file, const str
         }
     }
     //// leave this debug code in for now
-    //cout << "--- found chunks: ";
-    //for (auto const &[key, value] : chunk_positions) {
+    // cout << "--- found chunks: ";
+    // for (auto const &[key, value] : chunk_descriptors) {
     //    cout << '"' << key << '"' << "  ";
     //}
-    //cout << endl;
+    // cout << endl;
 
-    return make_tuple(chunk_positions, ss.str());
+    return make_tuple(chunk_descriptors, ss.str());
 }
 
 /*!
  * Checks if the passed chunks contain a chunk with FOURCC chunk_name_fourcc
  * and if at the very beginning of the data block the FOURCC format_type_fourcc is stored
  * If yes try to interpret the residual data block as a list of sub-chunks
- * If that fails return an empty ChunkPositionMap together with an error string
+ * If that fails return an empty ChunkDescriptorMap together with an error string
  * Returns a tuple of:
- *     - ChunkPositionMap: maps the FOURCC chunk ids of all valid chunks found to
+ *     - ChunkDescriptorMap: maps the FOURCC chunk ids of all valid chunks found to
  *       the positions and sizes of their data blocks.
  *       If empty then either the file is not a RIFF file or it is corrupt.
  *     - string: is empty if everything went fine, otherwise it contains a warning or error message.
  */
-static tuple<ChunkPositionMap, string> is_chunk_with_format_type_and_subchunks_present(
-    ifstream &file, const ChunkPositionMap &chunks, const std::string &chunk_name_fourcc,
+static tuple<ChunkDescriptorMap, string> get_chunk_descriptors_of_all_subschunks_of_chunk_of_passed_id_and_format_type(
+    ifstream &file, const ChunkDescriptorMap &chunks, const std::string &chunk_name_fourcc,
     const std::string &format_type_fourcc = std::string()) {
-    ChunkPositionMap riff_sub_chunks;
-    ostringstream    ss;
+    ChunkDescriptorMap riff_sub_chunks;
+    ostringstream      ss;
     if (!chunks.count(chunk_name_fourcc)) {
         ss << "No " << chunk_name_fourcc << " chunk found";
         return make_tuple(riff_sub_chunks, ss.str());
     }
-    const ChunkPosition &riff_chunk = chunks.find(chunk_name_fourcc)->second;
+    const ChunkDescriptor &riff_chunk = chunks.find(chunk_name_fourcc)->second;
     file.seekg(riff_chunk.start);
 
     size_t size_of_format_type = 0;
@@ -169,31 +160,36 @@ static tuple<ChunkPositionMap, string> is_chunk_with_format_type_and_subchunks_p
             return make_tuple(riff_sub_chunks, ss.str());
         }
     }
-    return read_all_chunks(file, file.tellg(), riff_chunk.data_size - size_of_format_type);
+    return read_all_chunk_descriptors(file, file.tellg(), riff_chunk.data_size - size_of_format_type);
 }
 
 /*! Checks if the chunks contain a valid "LIST" chunk of fomrmat type "INFO", extract its sub-chunks containing the
  *  meta data and adds them to the passed meta_info_chunks. In case a certain sub-chunk is already present in
  *  meta_info_chunks it is overwritten with the new one
  */
-void aggregate_meta_data(ifstream &infile, ChunkPositionMap &chunks, ChunkPositionMap &meta_info_chunks,
+void aggregate_meta_data(ifstream &infile, ChunkDescriptorMap &chunks, ChunkDescriptorMap &meta_info_chunks,
                          const std::string &chunk_fourcc, const std::string &format_type_fourcc = std::string()) {
     auto const &[new_meta_info_chunks, message] =
-        is_chunk_with_format_type_and_subchunks_present(infile, chunks, chunk_fourcc, format_type_fourcc);
+        get_chunk_descriptors_of_all_subschunks_of_chunk_of_passed_id_and_format_type(infile, chunks, chunk_fourcc,
+                                                                                      format_type_fourcc);
     meta_info_chunks.insert(new_meta_info_chunks.begin(), new_meta_info_chunks.end());
 }
 
-/*!
- *  Performs all consistency checks for PCM format header to be valid,
- *  see comments of FormatHeader in riff_format.h
- *  and "https://msdn.microsoft.com/en-us/library/windows/desktop/dd390970(v=vs.85).aspx"
- *  returns: if successful: tuple(true, <info string>)
- *				<info_string>: describes found audio data, e.g. "41.0 kHz, 16 bit, stereo"
- *                             should be used for info output to the user.
- *           on failure:    tuple(false, <undefined format_header, <error_message>)
- *  remark: bits per sample are not enforced to 8 or 16 as long as the value is an integer multiple of 8
- */
-static tuple<bool, string> check_sane_pcm_or_ieee_float_format_header(const FormatHeaderExtensible &header_extensible) {
+void aggregate_id3_tags(const ChunkDescriptorMap &chunks, ChunkDescriptorMap &meta_info_chunks) {
+}
+
+    /*!
+     *  Performs all consistency checks for PCM format header to be valid,
+     *  see comments of FormatHeader in riff_format.h
+     *  and "https://msdn.microsoft.com/en-us/library/windows/desktop/dd390970(v=vs.85).aspx"
+     *  returns: if successful: tuple(true, <info string>)
+     *				<info_string>: describes found audio data, e.g. "41.0 kHz, 16 bit, stereo"
+     *                             should be used for info output to the user.
+     *           on failure:    tuple(false, <undefined format_header, <error_message>)
+     *  remark: bits per sample are not enforced to 8 or 16 as long as the value is an integer multiple of 8
+     */
+    static tuple<bool, string> check_sane_pcm_or_ieee_float_format_header(
+        const FormatHeaderExtensible &header_extensible) {
     stringstream        ss;
     const FormatHeader &header = header_extensible.header;
 
@@ -293,7 +289,7 @@ static tuple<bool, string> check_sane_pcm_or_ieee_float_format_header(const Form
 }
 
 /*!
- *  Checks if the chunks in chunk_positions form a valid WAV file.
+ *  Checks if the chunks in chunk_descriptors form a valid WAV file.
  *  The chunk positions to pass can be obtained by calling is_valid_riff_file()
  *  Checks for a valid WAV file:
  *      - "fmt " and "data " chunks present
@@ -305,41 +301,41 @@ static tuple<bool, string> check_sane_pcm_or_ieee_float_format_header(const Form
  *        ( see check_sane_pcm_format_header() )
  *  If successful positions the stream "file" to the beginning of the PCM audio data
  *  returns: if successful: tuple(true, <valid pcm format header>,
- *                                <position and length of PCM data as ChunkPosition>,
+ *                                <position and length of PCM data as ChunkDescriptor>,
  *								  <info string>)
- *				<info_string>: describes found audio data, e.g. "41.0 kHz, 16 bit, stereo"
+ *		<info_string>: describes found audio data, e.g. "41.0 kHz, 16 bit, stereo"
  *                             should be used for info output to the user.
  *           on failure:    tuple(false, <undefined format_header>,
- *                                <undefined ChunkPosition object>, <error_message>)
+ *                                <undefined ChunkDescriptor object>, <error_message>)
  */
-static tuple<bool, FormatHeaderExtensible, ChunkPosition, string> is_valid_wav_file(ifstream &        file,
-                                                                                    ChunkPositionMap &chunk_positions) {
-    stringstream           ss;
+static tuple<bool, FormatHeaderExtensible, ChunkDescriptor, string> is_valid_wav_file(
+    ifstream &file, ChunkDescriptorMap &chunk_descriptors) {
+    ostringstream          ss;
     FormatHeaderExtensible format_header;
-    ChunkPosition          data_chunk_payload;
+    ChunkDescriptor        data_chunk_payload;
     // check first if there is a "fmt " chunk
-    if (!chunk_positions.count("fmt ")) {
+    if (!chunk_descriptors.count("fmt ")) {
         ss << "no \"fmt \" chunk found";
         return make_tuple(false, format_header, data_chunk_payload, ss.str());
     }
     // then make sure there is a data chunk
-    if (!chunk_positions.count("data")) {
+    if (!chunk_descriptors.count("data")) {
         ss << "no \"data\" chunk found";
         return make_tuple(false, format_header, data_chunk_payload, ss.str());
     }
     auto size      = sizeof(format_header);
-    auto data_size = chunk_positions["fmt "].data_size;
+    auto data_size = chunk_descriptors["fmt "].data_size;
     // and if it contains enough data to be the format header we expect
-    if (chunk_positions["fmt "].data_size < sizeof(FormatHeader)) {
+    if (chunk_descriptors["fmt "].data_size < sizeof(FormatHeader)) {
         ss << "not enough bytes to read the base format header";
         return make_tuple(false, format_header, data_chunk_payload, ss.str());
     }
     // then move pointer to start of data
     // and read it into the FormatHeader struct
-    file.seekg(chunk_positions["fmt "].start);
+    file.seekg(chunk_descriptors["fmt "].start);
     file.read((char *)&format_header.header, sizeof(format_header.header));
     if (format_header.header.audio_format == WAVE_FORMAT_EXTENSIBLE) {
-        if (chunk_positions["fmt "].data_size < sizeof(FormatHeaderExtensible)) {
+        if (chunk_descriptors["fmt "].data_size < sizeof(FormatHeaderExtensible)) {
             ss << "not enough bytes to read the extensible part of the format header";
             return make_tuple(false, format_header, data_chunk_payload, ss.str());
         }
@@ -350,10 +346,10 @@ static tuple<bool, FormatHeaderExtensible, ChunkPosition, string> is_valid_wav_f
         return make_tuple(false, format_header, data_chunk_payload, info_string);
     }
     // if this point is reached then the stream points to a valid WAV file
-    // with PCM content
+    // with PCM or IEEE FLOAT content
     // so return the validated FormatHeader structure and the position and length
-    // of the PCM data in the stream in a ChunkPosition structure
-    return make_tuple(true, format_header, chunk_positions["data"], info_string);
+    // of the PCM data in the stream in a ChunkDescriptor structure
+    return make_tuple(true, format_header, chunk_descriptors["data"], info_string);
 }
 
 /*!
@@ -490,7 +486,7 @@ static void print_error(const string &message, const string &error) {
 };
 
 // adds all id3 v2 tags for which corresponding info chunks are present in the passed meta_data
-static void create_id3_v2_tags(LameInit &lame_guard, shared_ptr<ifstream> in, const ChunkPositionMap &meta_data) {
+static void create_id3_v2_tags(LameInit &lame_guard, shared_ptr<ifstream> in, const ChunkDescriptorMap &meta_data) {
     // template lambda function (see auto keyword in front of (*setter) requires C++ 14)
     auto set_tag = [&lame_guard, in, &meta_data](auto (*setter)(lame_t, const char *), string list_info_fourcc) {
         if (!meta_data.count(list_info_fourcc)) {
@@ -509,13 +505,13 @@ static void create_id3_v2_tags(LameInit &lame_guard, shared_ptr<ifstream> in, co
             return;
         }
         // leave this debug code in for now
-        //ostringstream ss;
-        //ss << list_info_fourcc << ": " << tag_string_raw.get() << endl;
-        //tcout << ss.str();
+        // ostringstream ss;
+        // ss << list_info_fourcc << ": " << tag_string_raw.get() << endl;
+        // tcout << ss.str();
         setter(lame_guard, tag_string_raw.get());
     };
     id3tag_init(lame_guard);
-    id3tag_v2_only(lame_guard); // do not support ancient outdated id3 v1 tags by purpose
+    id3tag_v2_only(lame_guard);  // do not support ancient outdated id3 v1 tags by purpose
 
     set_tag(id3tag_set_title, "INAM");
     set_tag(id3tag_set_artist, "IART");
@@ -533,12 +529,13 @@ static void create_id3_v2_tags(LameInit &lame_guard, shared_ptr<ifstream> in, co
     // also more than one ID for genre found
     set_tag(id3tag_set_genre, "GENR");
     set_tag(id3tag_set_genre, "IGNR");
+    id3tag_set_fieldvalue(lame_guard, "TCOM=Frank Kahl");
 }
 
 // calls the config functions of lame according to the content of the header
 // and the encoding quality returned by Configuration::encoding_quality()
 static bool config_lame(LameInit &lame_guard, shared_ptr<ifstream> &in, const string &message,
-                        const FormatHeader &header, const ChunkPositionMap &list_info_chunk_meta_data) {
+                        const FormatHeader &header, const ChunkDescriptorMap &list_info_chunk_meta_data) {
     if (!lame_guard.is_initialized()) {
         string error = "lame_init() failed";
         print_error(message, error);
@@ -648,8 +645,8 @@ void convert_ieee_float_chunk(LameInit &lame_guard, std::shared_ptr<std::ifstrea
 // currently the argument thread_number is not used, but it can be useful to generate debug output
 // containing the thread number, so I leave it in for now
 static void convert_file_worker(shared_ptr<ifstream> in, shared_ptr<ofstream> out, const fs::path out_filename,
-                                const FormatHeaderExtensible header_extensible, const ChunkPosition pcm_data_position,
-                                string message, ChunkPositionMap list_info_chunk_meta_data, uint16_t thread_number) {
+                                const FormatHeaderExtensible header_extensible, const ChunkDescriptor pcm_data_position,
+                                string message, ChunkDescriptorMap list_info_chunk_meta_data, uint16_t thread_number) {
     // Define a lambda function for discard incomplete mp3 file in case of an error
     auto remove_mp3_file = [&out, &out_filename]() {
         out->close();
@@ -749,10 +746,10 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
 
         // check if a valid RIFF file
         // first read all top level chunks. A valid RIFF file contains at least one "RIFF" chunk
-        auto [top_level_chunks, message] = read_all_chunks(*file, 0, file_size);
-        ChunkPositionMap riff_chunks;
-        tie(riff_chunks, message) =
-            is_chunk_with_format_type_and_subchunks_present(*file, top_level_chunks, "RIFF", "WAVE");
+        auto [top_level_chunks, message] = read_all_chunk_descriptors(*file, 0, file_size);
+        ChunkDescriptorMap riff_chunks;
+        tie(riff_chunks, message) = get_chunk_descriptors_of_all_subschunks_of_chunk_of_passed_id_and_format_type(
+            *file, top_level_chunks, "RIFF", "WAVE");
         if (riff_chunks.empty()) {
             // only print an error if the file name ends with a .wav extension
             if (case_insensitive_compare(filename.extension().string(), ".wav")) {
@@ -767,13 +764,17 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
         // now aggregate the sub-chunks of all "LIST" chunks with format type "INFO" present in the top level chunks
         // and in the sub-chunks of the RIFF chunk. The info in the "LIST" chunk contained as "RIFF" sub-chunks takes
         // precedence
-        ChunkPositionMap meta_data;
+        ChunkDescriptorMap meta_data;
         aggregate_meta_data(*file, top_level_chunks, meta_data, "LIST", "INFO");
         aggregate_meta_data(*file, riff_chunks, meta_data, "LIST", "INFO");
-
+        // then add a chunk with "id3" to the meta_data, if present
+        // Again an "id3"-chunk in the riff_chunks takes precedence over an "id3"-chunk
+        // on the top-level.
+        aggregate_id3_tags(top_level_chunks, meta_data);
+        aggregate_id3_tags(riff_chunks, meta_data);
         // check if RIFF file is a valid WAV file with supported content
         FormatHeaderExtensible format_header;
-        ChunkPosition          pcm_data_position;
+        ChunkDescriptor        pcm_data_position;
         bool                   was_successful;
         tie(was_successful, format_header, pcm_data_position, message) = is_valid_wav_file(*file, riff_chunks);
         if (!was_successful) {

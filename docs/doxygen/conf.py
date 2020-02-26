@@ -30,8 +30,8 @@ author = 'Frank Kahl'
 extensions = [ "breathe", "exhale" ]
 
 # Breathe Configuration
-breathe_projects = { "Cinemo SDK" : "./doxyoutput/xml"}
-breathe_default_project = 'Cinemo SDK'
+breathe_projects = { "WAV to MP3 converter" : "./doxyoutput/xml"}
+breathe_default_project = 'WAV to MP3 converter'
 
 # Setup the exhale extension
 exhale_args = {

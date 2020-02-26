@@ -3,7 +3,7 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to Cinemo SDK's documentation!
+Welcome to documentation of WAV to MP3 converter!
 ======================================
 
 .. toctree::
@@ -16,5 +16,4 @@ Indices and tables
 ==================
 
 * :ref:`genindex`
-* :ref:`modindex`
 * :ref:`search`

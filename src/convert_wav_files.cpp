@@ -13,7 +13,6 @@
 //     - clear and detailed warning and error messages
 
 #include "convert_wav_files.h"
-
 #include "configuration.h"
 #include "lame_init.h"
 #include "return_code.h"
@@ -32,6 +31,7 @@
 #include <set>
 #include <sstream>
 #include <tuple>
+#include <string.h>
 
 #define ERROR_PREFIX "   [ ERROR ] "
 #define OK_PREFIX "   [  OK   ] "

@@ -30,3 +30,17 @@
 *.exe
 *.out
 *.app
+
+# CMake build output (in-source and out-of-source builds)
+/build/
+cmake-build-*/
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/Makefile
+
+# IDE settings (CLion)
+.idea/
+
+# MP3 files produced by test runs on the WAV test files
+wav_testfiles/*.mp3

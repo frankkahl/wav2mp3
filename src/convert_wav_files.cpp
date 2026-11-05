@@ -23,6 +23,7 @@
 #include "tiostream.h"
 
 #include <cstdint>
+#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <fstream>

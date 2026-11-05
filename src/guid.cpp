@@ -1,4 +1,6 @@
 #include "guid.h"
+
+#include <cstring>
 #include <iomanip>
 #include <ios>
 #include <iostream>

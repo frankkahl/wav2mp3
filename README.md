@@ -1,16 +1,16 @@
 # wav2mp3
 command line tool for converting all WAV audio files in a directory
-and and optionally in all its sub-folders to MP3.
+and optionally in all its sub-folders to MP3.
 Under Windows all external libraries have been statically linked to reduce
 dependency problems.
 
-current version: 1.0.0
+current version: 1.0.1
 
 1. wav2mp3 --help output:
 
-        wav2mp3.exe 0.9.0 using lame 3.100 and pthreads: converts all WAV files in passed directory to MP3
+        wav2mp3 1.0.1 using lame 3.100, cxxopts 2.2.0 and pthreads: converts all WAV files in passed directory to MP3
         Usage:
-          wav2mp3.exe [OPTION...] directory
+          wav2mp3 [OPTION...] directory
 
           -h, --help         print help
           -v, --version      print version
@@ -21,10 +21,13 @@ current version: 1.0.0
                              (highest) and 9 (lowest)) (default: 5)
           -a, --all          try to convert all files, not only those with the
                              extension .wav.
-          -t, --threads arg  number of threads (maximum 4) (default: 4)
+          -t, --threads arg  number of threads (maximum 32) (default: 32)
+
+        (the maximum and default number of threads equal the number of CPU cores
+         of the machine; the output above was taken on a machine with 32 cores)
 
 2. Description
-   - tested under Linux (Ubuntu 18.04)
+   - tested under Linux (TUXEDO OS, based on Ubuntu 24.04)
      and Windows (Windows 7)
    - a WAV file of name "<name>.wav" is converted into an MP3 with the file name
      "<name>.mp3". If such a file already exists it will be
@@ -37,7 +40,7 @@ current version: 1.0.0
    - by default uses as many threads as cores are available.
      This can be changed using the command line parameter -t/--threads
    - can be interrupted by pressing Ctrl-C or sending SIGTERM
-   - compression quality can be set via command line (default is 5, 0-9 are allowd)
+   - compression quality can be set via command line (default is 5, 0-9 are allowed)
    - supported formats are:
      - PCM:
        - 8, 16, 24, 32 bit integer, mono or stereo
@@ -55,10 +58,10 @@ current version: 1.0.0
              Instead storing meta data in an "id3 "-chunk seems to be the unofficial but de-facto
 	     standard supported by the majority of the software, including the Windows Explorer!
 	     => planned to support transfer of "id3 "-chunks in version 1.1.0
-2. Compiling from sources
+3. Compiling from sources
    - uses C++ 17 Standard
    - requires VS 2017 under Windows (tested with MSVC 19.16.27030.1) and
-     GCC 9.1 under Linux
+     GCC 13.3 under Linux (originally developed with GCC 9.1)
    - requires CMake 3.14 for building (must be in search path)
    - can be configured to use either
      - pthreads (POSIX 1003.1-2001) or
@@ -76,7 +79,7 @@ current version: 1.0.0
        - build_wav2mp3_using_C++_threads.bat (C++ native threads)
           
    - Linux:
-     - tested under Linux Ubuntu 18.04
+     - tested under Linux TUXEDO OS (based on Ubuntu 24.04)
      - requires pthreads - if used - and lame development packages
        (see more below)
      - compiling:
@@ -87,13 +90,13 @@ current version: 1.0.0
           * build_wav2mp3.sh (pthreads version) or
           * build_wav2mp3_using_C++_threads.sh (C++ native threads)
 
-3. Precompiled binaries:
+4. Precompiled binaries:
    - Windows: bin/windows/release/wav2mp3.exe
    - Linux:   bin/linux/release/wav2mp3
 
-4. To Do:
+5. To Do:
    - Transferring all meta data (e.g. Author, Album etc.)
      in a potentially present "id3 " chunk to the MP3 file
 
-5. Licenses:
+6. Licenses:
    - see file "LICENSE"

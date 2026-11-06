@@ -44,3 +44,7 @@ cmake-build-*/
 
 # MP3 files produced by test runs on the WAV test files
 wav_testfiles/*.mp3
+wav_format_testfiles/*.mp3
+
+# local helper script for regenerating the WAV format test files
+wav_format_testfiles/generate_format_testfiles.py

@@ -1,3 +1,19 @@
+1.0.1:
+   - fixed segfault on exit caused by cancelling an already joined thread
+   - added missing <cstring> includes causing compile errors with newer GCC versions
+   - fixed exit code: was always at least 1 (invalid arguments), even if all files were
+     converted successfully; now 0 on success and 2 if converting some files failed
+   - fixed missing space and separator in the warning about illegal bits per sample
+   - --version and --help also print the pthread version
+   - Linux build scripts use Ninja and out-of-source build directories (like CLion)
+   - CMake aborts with an installation hint if a required package is missing
+     and prints the version of the lame library
+   - README: Linux build instructions moved into an addendum, requirements updated
+   - copyrighted test files replaced by public domain and CC0 files (see SOURCES.md),
+     WAV format test files regenerated with ffmpeg (wav_format_testfiles)
+   - LICENSE: Linux libraries and test files added, full LGPL text of lame added
+     (lame-3.100/COPYING)
+   - Linux release binary rebuilt
 1.0.0:
    - Meta data in INFO-LIST chunks transferred to MP3 id3 v2 tags
 0.9.0: first released version supporting:

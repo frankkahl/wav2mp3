@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2019 Frank Kahl
+Copyright (c) 2019-2026 Frank Kahl
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -29,10 +29,10 @@ On all supported platforms this software uses the header-only library:
 On Windows this software uses the following third party libraries
 with static linkage:
 
-** lame 3.10:
-   - LGPL v2 license
+** lame 3.100:
+   - LGPL v2 license (GNU Library General Public License, version 2)
    - source code: http://lame.sourceforge.net/
-   - LICENSE and README files: "lame-3.100" directory
+   - LICENSE, COPYING (full license text) and README files: "lame-3.100" directory
 
 ** pthread:
    - PTHREADS4W (a.k.a. PTHREADS-WIN32)
@@ -42,3 +42,19 @@ with static linkage:
    - source code: https://sourceforge.net/projects/pthreads4w/
    - LICENSE and README files: "pthreads" directory
 
+On Linux this software links dynamically against the following libraries
+installed from the packages of the Linux distribution:
+
+** lame 3.100:
+   - LGPL v2 license (GNU Library General Public License, version 2)
+   - full license text: "lame-3.100/COPYING"
+
+** GNU C Library (glibc), including the pthreads implementation NPTL:
+   - LGPL v2.1 or later
+
+Test files:
+
+The sources and licenses of the audio files in the directories "wav_testfiles"
+and "wav_format_testfiles" are listed in the file "SOURCES.md". Most of them are
+in the public domain or dedicated to the public domain under CC0 1.0; the files
+created by the author of this software are covered by the MIT license above.

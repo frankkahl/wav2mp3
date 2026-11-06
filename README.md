@@ -108,8 +108,18 @@ current version: 1.0.1
    - Transferring all meta data (e.g. Author, Album etc.)
      in a potentially present "id3 " chunk to the MP3 file
 
-6. Licenses:
-   - see file "LICENSE"
+6. Test files:
+   - wav_testfiles: WAV files in the formats commonly found in practice
+     (8 and 16 bit PCM, mono and stereo, with and without meta data)
+     plus files testing error handling and special file names
+   - wav_format_testfiles: files in many different WAV formats, both supported
+     and unsupported ones, to test the format detection
+   - sources and licenses of all test files: see file "SOURCES.md"
+
+7. Licenses:
+   - wav2mp3: MIT license, see file "LICENSE"
+   - third party libraries: see file "LICENSE"
+   - test files: public domain, CC0 1.0 or MIT, see file "SOURCES.md"
 
 ------------------------------------------------------------------------
 

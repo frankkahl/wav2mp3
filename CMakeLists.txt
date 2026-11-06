@@ -122,10 +122,16 @@ elseif (CMAKE_HOST_UNIX)
    ## on linux the C++ threading library oviously uses pthreads
    ## so search and add it for both flavors
    include (FindThreads)
-   if ("${CMAKE_USE_PTHREADS_INIT}" STREQUAL "")
-      message (FATAL_ERROR "!! pthread library not found!")
-   endif ("${CMAKE_USE_PTHREADS_INIT}" STREQUAL "")
-   message (STATUS "-- pthread library used: ${CMAKE_THREAD_LIBS_INIT}")
+   if (NOT CMAKE_USE_PTHREADS_INIT)
+      message (FATAL_ERROR "!! pthread library not found!\n"
+                           "   Install the C development files, e.g. on Ubuntu:\n"
+                           "      sudo apt-get install build-essential")
+   endif ()
+   if ("${CMAKE_THREAD_LIBS_INIT}" STREQUAL "")
+      message (STATUS "-- pthread library used: part of libc")
+   else ()
+      message (STATUS "-- pthread library used: ${CMAKE_THREAD_LIBS_INIT}")
+   endif ()
    execute_process(COMMAND getconf GNU_LIBPTHREAD_VERSION
                    OUTPUT_VARIABLE PTHREAD_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
    message (STATUS "-- pthread implementation: ${PTHREAD_VERSION}")
@@ -134,11 +140,21 @@ elseif (CMAKE_HOST_UNIX)
 
    ## try to find the lame library
    find_library(LIBLAME mp3lame)
-   if ("${LIBLAME}" STREQUAL "LIBLAME-NOTFOUND")
-      message(FATAL_ERROR "!! lame library not found!")
-   endif ("${LIBLAME}" STREQUAL "LIBLAME-NOTFOUND" )
-   
-   message(STATUS "-- lame library used: ${LIBLAME}")
+   find_path(LAME_INCLUDE_DIR lame/lame.h)
+   if (NOT LIBLAME OR NOT LAME_INCLUDE_DIR)
+      message (FATAL_ERROR "!! lame library or header not found!\n"
+                           "   Install the lame development package, e.g. on Ubuntu:\n"
+                           "      sudo apt-get install libmp3lame-dev")
+   endif ()
+
+   find_package(PkgConfig QUIET)
+   if (NOT PKG_CONFIG_FOUND)
+      message (FATAL_ERROR "!! pkg-config not found!\n"
+                           "   Install it, e.g. on Ubuntu:\n"
+                           "      sudo apt-get install pkgconf")
+   endif ()
+   pkg_check_modules(LAME QUIET lame)
+   message(STATUS "-- lame library used: ${LIBLAME} (version ${LAME_VERSION})")
 
    target_link_libraries(wav2mp3 ${LIBLAME})
    

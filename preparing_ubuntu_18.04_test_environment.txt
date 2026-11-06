@@ -10,7 +10,8 @@
      # cmake 3.14.5 as snap package										       
      sudo apt-get update											       
      sudo apt-get install git										       
-     sudo snap  install cmake --classic									       
+     sudo apt-get install cmake
+     sudo apt-get install ninja-build
      													       
      # gcc/g++ 9.1												       
      sudo add-apt-repository ppa:ubuntu-toolchain-r/test							       

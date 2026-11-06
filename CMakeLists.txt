@@ -126,6 +126,9 @@ elseif (CMAKE_HOST_UNIX)
       message (FATAL_ERROR "!! pthread library not found!")
    endif ("${CMAKE_USE_PTHREADS_INIT}" STREQUAL "")
    message (STATUS "-- pthread library used: ${CMAKE_THREAD_LIBS_INIT}")
+   execute_process(COMMAND getconf GNU_LIBPTHREAD_VERSION
+                   OUTPUT_VARIABLE PTHREAD_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
+   message (STATUS "-- pthread implementation: ${PTHREAD_VERSION}")
 
    target_link_libraries(wav2mp3 ${CMAKE_THREAD_LIBS_INIT})
 

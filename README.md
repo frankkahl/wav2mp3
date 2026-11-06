@@ -8,7 +8,7 @@ current version: 1.0.1
 
 1. wav2mp3 --help output:
 
-        wav2mp3 1.0.1 using lame 3.100, cxxopts 2.2.0 and pthreads: converts all WAV files in passed directory to MP3
+        wav2mp3 1.0.1 using lame 3.100, cxxopts 2.2.0 and pthreads (NPTL 2.39): converts all WAV files in passed directory to MP3
         Usage:
           wav2mp3 [OPTION...] directory
 

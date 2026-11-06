@@ -18,6 +18,9 @@
 #include <string>
 #include "return_code.h"
 #include "thread_includes.h"
+#if !defined(USE_CPP11_THREADS) && !defined(_WIN32)
+#include <unistd.h>
+#endif
 
 using namespace std;
 namespace fs = std::filesystem;
@@ -130,8 +133,12 @@ string Configuration::version() {
     ss << "cxxopts " << CXXOPTS__VERSION_MAJOR << "." << CXXOPTS__VERSION_MINOR << "." << CXXOPTS__VERSION_PATCH;
 #ifdef USE_CPP11_THREADS
     ss << " and C++ native threading library";
+#elif defined(_WIN32)
+    ss << " and pthreads4w " << __PTW32_VERSION_MAJOR << "." << __PTW32_VERSION_MINOR << "." << __PTW32_VERSION_MICRO;
 #else
-    ss << " and pthreads";
+    char pthread_version[64] = {0};
+    confstr(_CS_GNU_LIBPTHREAD_VERSION, pthread_version, sizeof(pthread_version));
+    ss << " and pthreads (" << pthread_version << ")";
 #endif
     return ss.str();
 }

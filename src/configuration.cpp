@@ -59,32 +59,32 @@ bool Configuration::parse_arguments(int argc, char *argv[]) {
         ("superfluous", "", cxxopts::value<vector<string> >(superfluous_arguments));
     // clang-format on
     try {
-        set_return_code(RET_CODE_INVALID_ARGUMENTS);
         options.parse_positional({"directory", "superfluous"});
         auto result = options.parse(argc, argv);
         if (result.count("help")) {
             cout << options.help({""}) << endl;
-            set_return_code(RET_CODE_OK);
             return false;
         }
         if (result.count("version")) {
             cout << version() << endl;
-            set_return_code(RET_CODE_OK);
             return false;
         }
         if (!result.count("directory")) {
             cerr << "ERROR: no directory passed" << endl;
             cerr << options.help({""}) << endl;
+            set_return_code(RET_CODE_INVALID_ARGUMENTS);
             return false;
         }
         if (superfluous_arguments.size()) {
             cerr << "ERROR: only one positional argument allowed." << endl;
             cerr << options.help({""}) << endl;
+            set_return_code(RET_CODE_INVALID_ARGUMENTS);
             return false;
         }
         if (_encoding_quality < 0 || _encoding_quality > 9) {
             cerr << "ERROR: encoding quality must be an integer between 0 and 9" << endl;
             cerr << options.help({""}) << endl;
+            set_return_code(RET_CODE_INVALID_ARGUMENTS);
             return false;
         }
         _number_of_threads = _number_of_threads < 1 ? 1 : _number_of_threads;  // at least one thread is necessary
@@ -97,6 +97,7 @@ bool Configuration::parse_arguments(int argc, char *argv[]) {
     } catch (const cxxopts::OptionParseException &e) {
         cerr << "ERROR: " << e.what() << endl;
         cerr << options.help({""}) << endl;
+        set_return_code(RET_CODE_INVALID_ARGUMENTS);
         return false;
     }
 

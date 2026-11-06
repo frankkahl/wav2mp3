@@ -244,7 +244,7 @@ static tuple<bool, string> check_sane_pcm_or_ieee_float_format_header(const Form
             ss << "bits per sample of " << bps
                << " illegal for \"PCM\"; should always be a multiple of 8 with a maximum of " << 8 * sizeof(int32_t);
             bps = (bps + 7) / 8 * 8;  // correct container size to the next larger multiple of 8
-            ss << ", adjusting to " << bps << "bits per sample";
+            ss << ", adjusting to " << bps << " bits per sample; ";
         }
         if (bps > 8 * sizeof(int32_t)) {
             ss << setfill(' ') << setw(0) << dec;
@@ -745,6 +745,7 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
                 ss << ERROR_PREFIX << "Opening \"" << get_path_relative_to_top_level(filename)
                    << "\" failed, check permissions." << endl;
                 tcerr << ss.str();
+                set_return_code(RET_CODE_CONVERTING_SOME_FILES_FAILED);
             }
         }
 
@@ -761,6 +762,7 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
                 ss << ERROR_PREFIX << "\"" << get_path_relative_to_top_level(filename)
                    << "\" is not a valid RIFF file: " << message << endl;
                 tcerr << ss.str();
+                set_return_code(RET_CODE_CONVERTING_SOME_FILES_FAILED);
             }
             return;
         }
@@ -782,6 +784,7 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
             ss << ERROR_PREFIX << "\"" << get_path_relative_to_top_level(filename)
                << "\" is not a valid WAV file: " << message << endl;
             tcerr << ss.str();
+            set_return_code(RET_CODE_CONVERTING_SOME_FILES_FAILED);
             return;
         }
 
@@ -802,6 +805,7 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
             ss.str("");
             ss << ERROR_PREFIX << message << endl;
             tcerr << ss.str();
+            set_return_code(RET_CODE_CONVERTING_SOME_FILES_FAILED);
         }
 
     } catch (const exception &e) {
@@ -809,6 +813,7 @@ static void convert_file(const fs::path &filename, ThreadPool &thread_pool) {
         ss << ERROR_PREFIX << "converting \"" << get_path_relative_to_top_level(filename) << "\" failed:" << e.what()
            << endl;
         tcerr << ss.str();
+        set_return_code(RET_CODE_CONVERTING_SOME_FILES_FAILED);
     }
 }
 
